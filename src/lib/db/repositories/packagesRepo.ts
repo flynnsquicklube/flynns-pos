@@ -16,6 +16,10 @@ export async function getPackageById(id: string): Promise<ServicePackage | null>
   return rows[0] ?? null;
 }
 
+export async function getPackageWorkflowDetails(id: string): Promise<ServicePackage | null> {
+  return getPackageById(id);
+}
+
 export async function createPackage(input: ServicePackageInput): Promise<ServicePackage> {
   const id = createId("pkg");
   const timestamp = nowIso();

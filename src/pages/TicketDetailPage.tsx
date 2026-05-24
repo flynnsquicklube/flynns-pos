@@ -29,10 +29,12 @@ import { useToast } from "../components/ui/useToast";
 import type { Payment, PaymentMethod } from "../types/payment";
 import type { TicketStatus, TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
+import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
 
 interface TicketDetailPageProps {
   ticketId?: string;
   onBack: () => void;
+  onStartTicket?: () => void;
 }
 
 const statusLabels: Record<TicketStatus, string> = {
@@ -63,7 +65,7 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
-export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
+export function TicketDetailPage({ ticketId, onBack, onStartTicket }: TicketDetailPageProps) {
   const [ticket, setTicket] = useState<TicketWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -311,6 +313,7 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
           <Card className="p-5">
             <h3 className="text-lg font-bold text-slate-950">Workflow Actions</h3>
             <div className="mt-4 grid gap-3">
+              {locked && ticket.vehicle_id ? <Button onClick={() => { setStartTicketContext({ vehicleId: ticket.vehicle_id ?? undefined, customerId: ticket.customer_id ?? undefined, source: "order_detail" }); onStartTicket?.(); }}>New Ticket Same Vehicle</Button> : null}
               {ticket.status === "checked_in" ? (
                 <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                   <label className="block text-sm font-semibold text-slate-700">

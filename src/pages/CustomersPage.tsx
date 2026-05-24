@@ -27,6 +27,7 @@ import type { Vehicle } from "../types/vehicle";
 import type { TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
 import { formatMoney } from "../lib/utils/money";
+import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
 
 interface CustomersPageProps {
   initialCustomerId?: string;
@@ -245,7 +246,7 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
                 <div className="text-slate-500">{customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : "No visits"}</div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => void openCustomer(customer)}>Open</Button>
-                  <Button onClick={onStartTicket}>Start Ticket</Button>
+                  <Button onClick={() => { setStartTicketContext({ customerId: customer.id, source: "customer_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
                 </div>
               </div>
             ))}
@@ -262,7 +263,7 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-bold text-slate-950">Customer Detail: {selected.first_name} {selected.last_name}</h2>
             <div className="flex gap-2">
-              <Button onClick={onStartTicket}>Start Ticket</Button>
+              <Button onClick={() => { setStartTicketContext({ customerId: selected.id, source: "customer_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
               <Button variant="danger" disabled>Delete Coming Soon</Button>
             </div>
           </div>

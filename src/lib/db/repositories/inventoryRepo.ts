@@ -122,6 +122,158 @@ export async function getInventoryItem(id: string): Promise<InventoryItem | null
   return rows[0] ?? null;
 }
 
+export const getInventoryItemById = getInventoryItem;
+
+export async function findInventoryItemBySkuOrProductId(value: string): Promise<InventoryItem | null> {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  const rows = await query<InventoryItem>(
+    `SELECT * FROM inventory_items
+     WHERE deleted_at IS NULL
+       AND active = 1
+       AND (
+        sku = ?
+        OR product_id = ?
+        OR barcode = ?
+        OR REPLACE(UPPER(COALESCE(sku, '')), ' ', '') = REPLACE(UPPER(?), ' ', '')
+        OR REPLACE(UPPER(COALESCE(product_id, '')), ' ', '') = REPLACE(UPPER(?), ' ', '')
+        OR REPLACE(UPPER(COALESCE(barcode, '')), ' ', '') = REPLACE(UPPER(?), ' ', '')
+       )
+     ORDER BY quantity_on_hand DESC, updated_at DESC
+     LIMIT 1`,
+    [normalized, normalized, normalized, normalized, normalized, normalized]
+  );
+  return rows[0] ?? null;
+}
+
+export async function findOilFilterBySkuOrProductId(sku: string): Promise<InventoryItem | null> {
+  const normalized = sku.trim();
+  if (!normalized) return null;
+  const rows = await query<InventoryItem>(
+    `SELECT * FROM inventory_items
+     WHERE deleted_at IS NULL
+       AND active = 1
+       AND (
+        sku = ?
+        OR product_id = ?
+        OR REPLACE(UPPER(COALESCE(sku, '')), ' ', '') = REPLACE(UPPER(?), ' ', '')
+        OR REPLACE(UPPER(COALESCE(product_id, '')), ' ', '') = REPLACE(UPPER(?), ' ', '')
+        OR REPLACE(UPPER(COALESCE(barcode, '')), ' ', '') = REPLACE(UPPER(?), ' ', '')
+       )
+       AND (
+        LOWER(COALESCE(name, '') || ' ' || COALESCE(product_type, '') || ' ' || COALESCE(category, '') || ' ' || COALESCE(notes, '')) LIKE '%filter%'
+        OR UPPER(COALESCE(product_id, '')) LIKE 'OF%'
+        OR UPPER(COALESCE(sku, '')) LIKE 'OF%'
+       )
+     ORDER BY quantity_on_hand DESC, updated_at DESC
+     LIMIT 1`,
+    [normalized, normalized, normalized, normalized, normalized]
+  );
+  return rows[0] ?? null;
+}
+
+export async function searchOilFilters(queryText = "", limit = 25): Promise<InventoryItem[]> {
+  const like = `%${queryText.trim()}%`;
+  return query<InventoryItem>(
+    `SELECT * FROM inventory_items
+     WHERE deleted_at IS NULL
+       AND active = 1
+       AND (
+        LOWER(COALESCE(name, '') || ' ' || COALESCE(product_type, '') || ' ' || COALESCE(category, '') || ' ' || COALESCE(inventory_type, '') || ' ' || COALESCE(notes, '')) LIKE '%oil filter%'
+        OR LOWER(COALESCE(name, '') || ' ' || COALESCE(product_type, '') || ' ' || COALESCE(category, '') || ' ' || COALESCE(inventory_type, '') || ' ' || COALESCE(notes, '')) LIKE '%engine oil filter%'
+        OR UPPER(COALESCE(product_id, '')) LIKE 'OF%'
+        OR UPPER(COALESCE(sku, '')) LIKE 'OF%'
+       )
+       AND (
+        ? = '%%'
+        OR sku LIKE ?
+        OR product_id LIKE ?
+        OR barcode LIKE ?
+        OR name LIKE ?
+        OR product_type LIKE ?
+        OR inventory_type LIKE ?
+        OR vendor LIKE ?
+        OR notes LIKE ?
+       )
+     ORDER BY quantity_on_hand DESC, product_id ASC, sku ASC
+     LIMIT ?`,
+    [like, like, like, like, like, like, like, like, like, limit]
+  );
+}
+
+export async function searchOilFiltersForVehicle(vehicle: { make?: string | null; model?: string | null }, limit = 8): Promise<InventoryItem[]> {
+  const make = vehicle.make?.trim();
+  const model = vehicle.model?.trim();
+  const params: unknown[] = [];
+  const clauses = [
+    "deleted_at IS NULL",
+    "active = 1",
+    `(
+      LOWER(COALESCE(name, '') || ' ' || COALESCE(product_type, '') || ' ' || COALESCE(category, '') || ' ' || COALESCE(notes, '')) LIKE '%oil filter%'
+      OR LOWER(COALESCE(name, '') || ' ' || COALESCE(product_type, '') || ' ' || COALESCE(category, '') || ' ' || COALESCE(notes, '')) LIKE '%engine oil filter%'
+      OR UPPER(COALESCE(product_id, '')) LIKE 'OF%'
+      OR UPPER(COALESCE(sku, '')) LIKE 'OF%'
+    )`
+  ];
+  if (make) {
+    clauses.push("(notes LIKE ? OR name LIKE ?)");
+    params.push(`%${make}%`, `%${make}%`);
+  }
+  if (model) {
+    clauses.push("(notes LIKE ? OR name LIKE ?)");
+    params.push(`%${model}%`, `%${model}%`);
+  }
+  return query<InventoryItem>(
+    `SELECT * FROM inventory_items
+     WHERE ${clauses.join(" AND ")}
+     ORDER BY quantity_on_hand DESC, retail_price ASC
+     LIMIT ?`,
+    [...params, limit]
+  );
+}
+
+export async function searchEngineOil(queryText = "", oilType = "", limit = 25): Promise<InventoryItem[]> {
+  const like = `%${queryText.trim()}%`;
+  const oilLike = `%${oilType.trim()}%`;
+  return query<InventoryItem>(
+    `SELECT * FROM inventory_items
+     WHERE deleted_at IS NULL
+       AND active = 1
+       AND (
+        LOWER(COALESCE(name, '') || ' ' || COALESCE(product_type, '') || ' ' || COALESCE(category, '') || ' ' || COALESCE(inventory_type, '') || ' ' || COALESCE(notes, '')) LIKE '%engine oil%'
+        OR LOWER(COALESCE(category, '') || ' ' || COALESCE(inventory_type, '')) LIKE '%oil%'
+        OR viscosity IS NOT NULL
+        OR oil_formulation IS NOT NULL
+       )
+       AND (
+        ? = '%%'
+        OR sku LIKE ?
+        OR product_id LIKE ?
+        OR barcode LIKE ?
+        OR name LIKE ?
+        OR product_type LIKE ?
+        OR vendor LIKE ?
+        OR viscosity LIKE ?
+        OR oil_formulation LIKE ?
+        OR notes LIKE ?
+       )
+       AND (
+        ? = '%%'
+        OR oil_formulation LIKE ?
+        OR viscosity LIKE ?
+        OR name LIKE ?
+        OR notes LIKE ?
+       )
+     ORDER BY
+       CASE WHEN quantity_on_hand > 0 THEN 0 ELSE 1 END,
+       quantity_on_hand DESC,
+       product_id ASC,
+       sku ASC
+     LIMIT ?`,
+    [like, like, like, like, like, like, like, like, like, like, oilLike, oilLike, oilLike, oilLike, oilLike, limit]
+  );
+}
+
 export async function createInventoryItem(input: InventoryInput): Promise<InventoryItem> {
   const id = createId("inv");
   const timestamp = nowIso();

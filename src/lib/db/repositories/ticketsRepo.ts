@@ -116,9 +116,9 @@ export async function createTicketWithItems(input: CreateTicketInput): Promise<T
     await execute(
       `INSERT INTO ticket_items (
         id, ticket_id, service_id, item_type, package_id, inventory_item_id,
-        name, quantity, unit_price, line_total, taxable,
+        cost, sku, product_id, source_price_type, name, quantity, unit_price, line_total, taxable,
         created_at, updated_at, deleted_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending')`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending')`,
       [
         createId("item"),
         id,
@@ -126,6 +126,10 @@ export async function createTicketWithItems(input: CreateTicketInput): Promise<T
         item.item_type ?? (item.service_id ? "service" : "custom"),
         item.package_id ?? null,
         item.inventory_item_id ?? null,
+        item.cost ?? null,
+        item.sku ?? null,
+        item.product_id ?? null,
+        item.source_price_type ?? null,
         item.name,
         item.quantity,
         item.unit_price,
@@ -142,9 +146,11 @@ export async function createTicketWithItems(input: CreateTicketInput): Promise<T
       `INSERT INTO ticket_package_details (
         id, ticket_id, package_id, package_name, oil_brand, oil_type, included_quarts,
         actual_quarts, extra_quarts, extra_quart_price, extra_quart_total,
-        filter_type, cartridge_filter_extra_fee, package_base_price, package_total,
+        filter_type, cartridge_filter_extra_fee, oil_filter_inventory_item_id,
+        oil_filter_sku, oil_filter_name, oil_filter_source, oil_inventory_item_id,
+        oil_sku, oil_name, oil_source, package_base_price, package_total,
         created_at, updated_at, deleted_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending')`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending')`,
       [
         createId("tpd"),
         id,
@@ -159,6 +165,14 @@ export async function createTicketWithItems(input: CreateTicketInput): Promise<T
         input.packageDetails.extra_quart_total,
         input.packageDetails.filter_type,
         input.packageDetails.cartridge_filter_extra_fee,
+        input.packageDetails.oil_filter_inventory_item_id ?? null,
+        input.packageDetails.oil_filter_sku ?? null,
+        input.packageDetails.oil_filter_name ?? null,
+        input.packageDetails.oil_filter_source ?? null,
+        input.packageDetails.oil_inventory_item_id ?? null,
+        input.packageDetails.oil_sku ?? null,
+        input.packageDetails.oil_name ?? null,
+        input.packageDetails.oil_source ?? null,
         input.packageDetails.package_base_price,
         input.packageDetails.package_total,
         timestamp,
@@ -170,6 +184,14 @@ export async function createTicketWithItems(input: CreateTicketInput): Promise<T
   const ticket = await getTicketById(id);
   if (!ticket) throw new Error("Ticket was not created.");
   return ticket;
+}
+
+export async function createOrUpdateServiceTicket(input: CreateTicketInput & { ticket_id?: string | null }): Promise<TicketWithDetails> {
+  if (input.ticket_id) {
+    const existing = await getTicketById(input.ticket_id);
+    if (existing) return existing;
+  }
+  return createTicketWithItems(input);
 }
 
 export async function listTicketsWithDetails(filters: TicketFilters = {}): Promise<TicketWithDetails[]> {
@@ -316,6 +338,37 @@ export async function getTicketById(id: string): Promise<TicketWithDetails | nul
   return { ...ticket, items, packageDetails };
 }
 
+export async function getLastCompletedTicketPackageDetailsByVehicle(vehicleId: string): Promise<TicketPackageDetails | null> {
+  const rows = await query<TicketPackageDetails>(
+    `SELECT tpd.*
+     FROM ticket_package_details tpd
+     JOIN tickets t ON t.id = tpd.ticket_id
+     WHERE t.vehicle_id = ?
+       AND t.status = 'completed'
+       AND t.deleted_at IS NULL
+       AND tpd.deleted_at IS NULL
+     ORDER BY COALESCE(t.completed_at, t.created_at) DESC
+     LIMIT 1`,
+    [vehicleId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getLastCompletedTicketItemsByVehicle(vehicleId: string): Promise<TicketItem[]> {
+  return query<TicketItem>(
+    `SELECT ti.*
+     FROM ticket_items ti
+     JOIN tickets t ON t.id = ti.ticket_id
+     WHERE t.vehicle_id = ?
+       AND t.status = 'completed'
+       AND t.deleted_at IS NULL
+       AND ti.deleted_at IS NULL
+     ORDER BY COALESCE(t.completed_at, t.created_at) DESC, ti.created_at DESC
+     LIMIT 30`,
+    [vehicleId]
+  );
+}
+
 export async function updateTicketStatus(id: string, status: TicketStatus): Promise<void> {
   const ticket = await getTicket(id);
   if (!ticket) throw new Error("Ticket not found.");
@@ -388,8 +441,8 @@ export async function addTicketItem(ticketId: string, item: TicketLineInput, tax
   await execute(
     `INSERT INTO ticket_items (
       id, ticket_id, service_id, item_type, package_id, inventory_item_id, name,
-      quantity, unit_price, line_total, taxable, created_at, updated_at, deleted_at, sync_status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending')`,
+      cost, sku, product_id, source_price_type, quantity, unit_price, line_total, taxable, created_at, updated_at, deleted_at, sync_status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending')`,
     [
       createId("item"),
       ticketId,
@@ -398,6 +451,10 @@ export async function addTicketItem(ticketId: string, item: TicketLineInput, tax
       item.package_id ?? null,
       item.inventory_item_id ?? null,
       item.name,
+      item.cost ?? null,
+      item.sku ?? null,
+      item.product_id ?? null,
+      item.source_price_type ?? null,
       item.quantity,
       item.unit_price,
       Math.round(item.quantity * item.unit_price * 100) / 100,
@@ -440,7 +497,12 @@ export async function completeTicket(id: string, input: CompleteTicketInput): Pr
     reference: input.reference ?? null,
     paid_at: timestamp
   });
-  await updateVehicleAfterService(ticket.vehicle_id, input.finalMileage, input.oilType);
+  const completedOilType = input.oilType ?? ticket.packageDetails?.oil_type ?? null;
+  await updateVehicleAfterService(ticket.vehicle_id, input.finalMileage, completedOilType, {
+    oil_capacity: ticket.packageDetails?.actual_quarts ?? null,
+    oil_filter_sku: ticket.packageDetails?.oil_filter_sku ?? null,
+    oil_filter_inventory_item_id: ticket.packageDetails?.oil_filter_inventory_item_id ?? null
+  });
   await execute(
     "UPDATE tickets SET status = 'completed', payment_status = ?, completed_at = ?, bay = NULL, updated_at = ?, sync_status = 'pending' WHERE id = ?",
     [paymentStatus, timestamp, timestamp, id]
@@ -451,8 +513,11 @@ export async function completeTicket(id: string, input: CompleteTicketInput): Pr
     vehicle_id: ticket.vehicle_id,
     service_date: timestamp,
     mileage: input.finalMileage,
-    oil_type: input.oilType,
-    services_json: JSON.stringify(ticket.items.map((item) => ({ name: item.name, quantity: item.quantity, unit_price: item.unit_price, line_total: item.line_total }))),
+    oil_type: completedOilType,
+    services_json: JSON.stringify({
+      items: ticket.items.map((item) => ({ name: item.name, quantity: item.quantity, unit_price: item.unit_price, line_total: item.line_total, inventory_item_id: item.inventory_item_id })),
+      packageDetails: ticket.packageDetails ?? null
+    }),
     notes: [ticket.customer_concern, ticket.technician_notes, ticket.internal_notes].filter(Boolean).join(" | ") || null
   });
 }
@@ -462,8 +527,8 @@ export async function startService(ticketId: string, bay: string): Promise<void>
   if (!ticket) throw new Error("Ticket not found.");
   assertTicketTransition(ticket.status, "in_service");
   await execute(
-    "UPDATE tickets SET status = 'in_service', bay = ?, updated_at = ?, sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL",
-    [bay, nowIso(), ticketId]
+    "UPDATE tickets SET status = 'in_service', bay = ?, started_at = COALESCE(started_at, ?), updated_at = ?, sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL",
+    [bay, nowIso(), nowIso(), ticketId]
   );
 }
 

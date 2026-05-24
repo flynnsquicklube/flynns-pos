@@ -19,6 +19,7 @@ export interface Ticket {
   technician_notes: string | null;
   internal_notes: string | null;
   bay: string | null;
+  started_at?: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -33,6 +34,10 @@ export interface TicketItem {
   item_type: string | null;
   package_id: string | null;
   inventory_item_id: string | null;
+  cost?: number | null;
+  sku?: string | null;
+  product_id?: string | null;
+  source_price_type?: string | null;
   name: string;
   quantity: number;
   unit_price: number;
@@ -67,6 +72,10 @@ export interface TicketLineInput {
   item_type?: "service" | "package" | "fee" | "discount" | "custom" | "inventory";
   package_id?: string | null;
   inventory_item_id?: string | null;
+  cost?: number | null;
+  sku?: string | null;
+  product_id?: string | null;
+  source_price_type?: string | null;
   name: string;
   quantity: number;
   unit_price: number;

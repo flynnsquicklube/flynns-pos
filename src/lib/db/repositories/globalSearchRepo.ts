@@ -33,6 +33,8 @@ export interface GlobalVehicleResult {
 
 export interface GlobalTicketResult {
   id: string;
+  vehicle_id: string | null;
+  customer_id: string | null;
   external_id: string | null;
   created_at: string;
   completed_at: string | null;
@@ -113,7 +115,7 @@ export async function globalSearch(searchQuery: string, options: GlobalSearchOpt
   );
 
   const tickets = await query<GlobalTicketResult>(
-    `SELECT t.id, t.external_id, t.created_at, t.completed_at, t.status, t.payment_status, t.total,
+    `SELECT t.id, t.vehicle_id, t.customer_id, t.external_id, t.created_at, t.completed_at, t.status, t.payment_status, t.total,
       (c.first_name || ' ' || c.last_name) AS customer_name,
       TRIM(COALESCE(v.year, '') || ' ' || COALESCE(v.make, '') || ' ' || COALESCE(v.model, '')) AS vehicle_label,
       v.plate AS vehicle_plate,
@@ -142,4 +144,3 @@ export async function globalSearch(searchQuery: string, options: GlobalSearchOpt
 
   return { customers, vehicles, tickets };
 }
-

@@ -3,6 +3,7 @@ import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { GlobalSearchBox } from "../search/GlobalSearchBox";
 import type { PageKey } from "./Sidebar";
+import { setStartTicketContext } from "../../lib/domain/startTicket/startTicketContext";
 
 interface TopBarProps {
   onNavigate: (page: PageKey, entityId?: string) => void;
@@ -15,7 +16,22 @@ export function TopBar({ onNavigate }: TopBarProps) {
         onCustomer={(id) => onNavigate("customers", id)}
         onVehicle={(id) => onNavigate("vehicles", id)}
         onTicket={(id) => onNavigate("ticket-detail", id)}
-        onUseVin={() => onNavigate("order-wizard")}
+        onStartCustomer={(id) => {
+          setStartTicketContext({ customerId: id, source: "global_search" });
+          onNavigate("order-wizard");
+        }}
+        onStartVehicle={(id) => {
+          setStartTicketContext({ vehicleId: id, source: "global_search" });
+          onNavigate("order-wizard");
+        }}
+        onStartTicketVehicle={(vehicleId, customerId) => {
+          setStartTicketContext({ vehicleId, customerId: customerId ?? undefined, source: "order_detail" });
+          onNavigate("order-wizard");
+        }}
+        onUseVin={(vin) => {
+          setStartTicketContext({ vin, source: "global_search" });
+          onNavigate("order-wizard");
+        }}
       />
       <Button icon={<Sparkles size={18} />} onClick={() => onNavigate("order-wizard")}>Start Ticket</Button>
       <button type="button" disabled className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] text-[var(--pos-muted)]" title="Notifications Coming Soon">
@@ -33,4 +49,3 @@ export function TopBar({ onNavigate }: TopBarProps) {
     </header>
   );
 }
-

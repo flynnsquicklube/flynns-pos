@@ -13,6 +13,7 @@ import type { Vehicle } from "../types/vehicle";
 import type { Customer } from "../types/customer";
 import type { TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
+import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
 
 interface VehiclesPageProps {
   initialVehicleId?: string;
@@ -175,7 +176,7 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-xl font-bold text-slate-950">{selected ? "Vehicle Detail" : "Add Vehicle"}</h3>
-            <Button onClick={onStartTicket}>Start Ticket</Button>
+            <Button onClick={() => { if (selected) setStartTicketContext({ vehicleId: selected.id, customerId: selected.customer_id, source: "vehicle_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <label className="text-sm font-semibold text-slate-700">Owner

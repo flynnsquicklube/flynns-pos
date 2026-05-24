@@ -90,6 +90,18 @@ export async function listRecentVehicles(limit = 10): Promise<VehicleSearchResul
   return searchVehiclesAdvanced("", limit, 0);
 }
 
+export async function listVehiclesByCustomerId(customerId: string): Promise<VehicleSearchResult[]> {
+  return query<VehicleSearchResult>(
+    `SELECT v.*, (c.first_name || ' ' || c.last_name) AS customer_name,
+      (SELECT MAX(COALESCE(t.completed_at, t.created_at)) FROM tickets t WHERE t.vehicle_id = v.id AND t.deleted_at IS NULL) AS last_visit
+     FROM vehicles v
+     LEFT JOIN customers c ON c.id = v.customer_id
+     WHERE v.deleted_at IS NULL AND v.customer_id = ?
+     ORDER BY COALESCE(last_visit, v.updated_at) DESC`,
+    [customerId]
+  );
+}
+
 export async function countVehicleSearchResults(search = ""): Promise<number> {
   const params: unknown[] = [];
   const where = vehicleSearchWhere(search, params);
@@ -151,11 +163,82 @@ export async function deleteVehicle(id: string): Promise<void> {
   await execute("UPDATE vehicles SET deleted_at = ?, updated_at = ?, sync_status = 'pending' WHERE id = ?", [nowIso(), nowIso(), id]);
 }
 
-export async function updateVehicleAfterService(vehicleId: string, mileage: number, oilType: string | null): Promise<void> {
-  await execute("UPDATE vehicles SET mileage = ?, oil_type = COALESCE(?, oil_type), updated_at = ?, sync_status = 'pending' WHERE id = ?", [
-    mileage,
-    oilType,
-    nowIso(),
-    vehicleId
-  ]);
+export interface VehicleServiceDefaults {
+  oil_type: string | null;
+  oil_capacity: number | null;
+  oil_filter_sku: string | null;
+  oil_filter_inventory_item_id: string | null;
+  last_oil_change_date: string | null;
+  last_oil_change_mileage: number | null;
+}
+
+export async function getVehicleServiceDefaults(vehicleId: string): Promise<VehicleServiceDefaults | null> {
+  const rows = await query<VehicleServiceDefaults>(
+    `SELECT oil_type, oil_capacity, oil_filter_sku, oil_filter_inventory_item_id,
+      last_oil_change_date, last_oil_change_mileage
+     FROM vehicles
+     WHERE id = ? AND deleted_at IS NULL`,
+    [vehicleId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function updateVehicleServiceDefaults(vehicleId: string, defaults: Partial<VehicleServiceDefaults>): Promise<void> {
+  const current = await getVehicle(vehicleId);
+  if (!current) throw new Error("Vehicle not found.");
+  await execute(
+    `UPDATE vehicles SET
+      oil_type = COALESCE(?, oil_type),
+      oil_capacity = COALESCE(?, oil_capacity),
+      oil_filter_sku = COALESCE(?, oil_filter_sku),
+      oil_filter_inventory_item_id = COALESCE(?, oil_filter_inventory_item_id),
+      last_oil_change_date = COALESCE(?, last_oil_change_date),
+      last_oil_change_mileage = COALESCE(?, last_oil_change_mileage),
+      updated_at = ?,
+      sync_status = 'pending'
+     WHERE id = ?`,
+    [
+      defaults.oil_type ?? null,
+      defaults.oil_capacity ?? null,
+      defaults.oil_filter_sku ?? null,
+      defaults.oil_filter_inventory_item_id ?? null,
+      defaults.last_oil_change_date ?? null,
+      defaults.last_oil_change_mileage ?? null,
+      nowIso(),
+      vehicleId
+    ]
+  );
+}
+
+export async function updateVehicleAfterService(
+  vehicleId: string,
+  mileage: number,
+  oilType: string | null,
+  defaults: Partial<Pick<VehicleServiceDefaults, "oil_capacity" | "oil_filter_sku" | "oil_filter_inventory_item_id">> = {}
+): Promise<void> {
+  const timestamp = nowIso();
+  await execute(
+    `UPDATE vehicles SET
+      mileage = ?,
+      oil_type = COALESCE(?, oil_type),
+      oil_capacity = COALESCE(?, oil_capacity),
+      oil_filter_sku = COALESCE(?, oil_filter_sku),
+      oil_filter_inventory_item_id = COALESCE(?, oil_filter_inventory_item_id),
+      last_oil_change_date = ?,
+      last_oil_change_mileage = ?,
+      updated_at = ?,
+      sync_status = 'pending'
+     WHERE id = ?`,
+    [
+      mileage,
+      oilType,
+      defaults.oil_capacity ?? null,
+      defaults.oil_filter_sku ?? null,
+      defaults.oil_filter_inventory_item_id ?? null,
+      timestamp,
+      mileage,
+      timestamp,
+      vehicleId
+    ]
+  );
 }

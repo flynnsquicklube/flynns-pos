@@ -1,16 +1,17 @@
 import { CarFront, ClipboardPlus, Search, Users } from "lucide-react";
 import { Card } from "../components/ui/Card";
 import type { PageKey } from "../components/layout/Sidebar";
+import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
 
 interface StartOrderPageProps {
   onNavigate: (page: PageKey) => void;
 }
 
 const options = [
-  { label: "Vehicle", subtitle: "Scan or search plate, VIN, or vehicle", icon: CarFront, page: "order-wizard" as PageKey },
-  { label: "Customer / Fleet", subtitle: "Start from a customer record", icon: Users, page: "order-wizard" as PageKey },
-  { label: "Year / Make / Model", subtitle: "Manual vehicle lookup workflow", icon: Search, page: "order-wizard" as PageKey },
-  { label: "Other Vehicle", subtitle: "Create a manual vehicle ticket", icon: ClipboardPlus, page: "order-wizard" as PageKey }
+  { label: "Vehicle", subtitle: "Scan or search plate, VIN, or vehicle", icon: CarFront, page: "order-wizard" as PageKey, startingPoint: "vehicle" as const },
+  { label: "Customer / Fleet", subtitle: "Start from a customer record", icon: Users, page: "order-wizard" as PageKey, startingPoint: "customer" as const },
+  { label: "Year / Make / Model", subtitle: "Manual vehicle lookup workflow", icon: Search, page: "order-wizard" as PageKey, startingPoint: "manual" as const },
+  { label: "Other Vehicle", subtitle: "Create a manual vehicle ticket", icon: ClipboardPlus, page: "order-wizard" as PageKey, startingPoint: "manual" as const }
 ];
 
 export function StartOrderPage({ onNavigate }: StartOrderPageProps) {
@@ -28,7 +29,7 @@ export function StartOrderPage({ onNavigate }: StartOrderPageProps) {
           {options.map((option) => {
             const Icon = option.icon;
             return (
-              <button key={option.label} onClick={() => onNavigate(option.page)} className="rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] p-6 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--pos-blue)] hover:bg-[var(--pos-card-hover)] hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--pos-blue-soft)]">
+              <button key={option.label} onClick={() => { setStartTicketContext({ startingPoint: option.startingPoint, source: "global_search" }); onNavigate(option.page); }} className="rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] p-6 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--pos-blue)] hover:bg-[var(--pos-card-hover)] hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--pos-blue-soft)]">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--pos-blue-soft)] text-[var(--pos-blue-2)]">
                   <Icon size={34} />
                 </div>

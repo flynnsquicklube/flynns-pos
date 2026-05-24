@@ -34,6 +34,70 @@ export async function getServiceHistoryByVehicle(vehicleId: string): Promise<Ser
   return query<ServiceHistory>("SELECT * FROM service_history WHERE vehicle_id = ? AND deleted_at IS NULL ORDER BY service_date DESC", [vehicleId]);
 }
 
+export async function getOilChangeHistoryByVehicle(vehicleId: string, limit = 10): Promise<ServiceHistory[]> {
+  return query<ServiceHistory>(
+    `SELECT * FROM service_history
+     WHERE vehicle_id = ?
+       AND deleted_at IS NULL
+       AND LOWER(COALESCE(services_json, '') || ' ' || COALESCE(oil_type, '') || ' ' || COALESCE(notes, '')) LIKE '%oil%'
+     ORDER BY service_date DESC
+     LIMIT ?`,
+    [vehicleId, limit]
+  );
+}
+
+export interface LastOilFilterHistory {
+  inventoryItemId: string | null;
+  sku: string | null;
+  name: string | null;
+  sourceText: string | null;
+}
+
+export async function getLastOilFilterForVehicle(vehicleId: string): Promise<LastOilFilterHistory | null> {
+  const rows = await query<{ services_json: string }>(
+    `SELECT services_json
+     FROM service_history
+     WHERE vehicle_id = ? AND deleted_at IS NULL
+     ORDER BY service_date DESC
+     LIMIT 10`,
+    [vehicleId]
+  );
+  for (const row of rows) {
+    try {
+      const parsed = JSON.parse(row.services_json) as unknown;
+      const packageDetails = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>).packageDetails as Record<string, unknown> | null : null;
+      if (packageDetails?.oil_filter_sku || packageDetails?.oil_filter_name || packageDetails?.oil_filter_inventory_item_id) {
+        return {
+          inventoryItemId: typeof packageDetails.oil_filter_inventory_item_id === "string" ? packageDetails.oil_filter_inventory_item_id : null,
+          sku: typeof packageDetails.oil_filter_sku === "string" ? packageDetails.oil_filter_sku : null,
+          name: typeof packageDetails.oil_filter_name === "string" ? packageDetails.oil_filter_name : null,
+          sourceText: JSON.stringify(packageDetails)
+        };
+      }
+      const items = Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" ? ((parsed as Record<string, unknown>).items as unknown[]) ?? [] : [];
+      const match = items.find((item) => {
+        if (!item || typeof item !== "object") return false;
+        const candidate = item as Record<string, unknown>;
+        const text = `${String(candidate.name ?? "")} ${String(candidate.sku ?? "")} ${String(candidate.product_id ?? "")}`.toLowerCase();
+        return text.includes("filter");
+      }) as Record<string, unknown> | undefined;
+      if (match) {
+        return {
+          inventoryItemId: typeof match.inventory_item_id === "string" ? match.inventory_item_id : null,
+          sku: typeof match.sku === "string" ? match.sku : typeof match.product_id === "string" ? match.product_id : null,
+          name: typeof match.name === "string" ? match.name : null,
+          sourceText: JSON.stringify(match)
+        };
+      }
+    } catch {
+      if (row.services_json.toLowerCase().includes("filter")) {
+        return { inventoryItemId: null, sku: null, name: "Oil filter", sourceText: row.services_json };
+      }
+    }
+  }
+  return null;
+}
+
 export async function getServiceHistoryByCustomer(customerId: string): Promise<ServiceHistory[]> {
   return query<ServiceHistory>("SELECT * FROM service_history WHERE customer_id = ? AND deleted_at IS NULL ORDER BY service_date DESC", [customerId]);
 }

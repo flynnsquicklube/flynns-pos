@@ -10,10 +10,13 @@ interface GlobalSearchBoxProps {
   onCustomer: (id: string) => void;
   onVehicle: (id: string) => void;
   onTicket: (id: string) => void;
+  onStartCustomer: (id: string) => void;
+  onStartVehicle: (id: string) => void;
+  onStartTicketVehicle?: (vehicleLookup: string, customerId?: string | null) => void;
   onUseVin?: (vin: string) => void;
 }
 
-export function GlobalSearchBox({ onCustomer, onVehicle, onTicket, onUseVin }: GlobalSearchBoxProps) {
+export function GlobalSearchBox({ onCustomer, onVehicle, onTicket, onStartCustomer, onStartVehicle, onStartTicketVehicle, onUseVin }: GlobalSearchBoxProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GlobalSearchResults>(emptyResults);
   const [loading, setLoading] = useState(false);
@@ -91,10 +94,12 @@ export function GlobalSearchBox({ onCustomer, onVehicle, onTicket, onUseVin }: G
           onCustomer={(id) => { closeAndClear(); onCustomer(id); }}
           onVehicle={(id) => { closeAndClear(); onVehicle(id); }}
           onTicket={(id) => { closeAndClear(); onTicket(id); }}
+          onStartCustomer={(id) => { closeAndClear(); onStartCustomer(id); }}
+          onStartVehicle={(id) => { closeAndClear(); onStartVehicle(id); }}
+          onStartTicketVehicle={onStartTicketVehicle ? (vehicleLookup, customerId) => { closeAndClear(); onStartTicketVehicle(vehicleLookup, customerId); } : undefined}
           onUseVin={onUseVin ? (vin) => { closeAndClear(); onUseVin(vin); } : undefined}
         />
       ) : null}
     </div>
   );
 }
-

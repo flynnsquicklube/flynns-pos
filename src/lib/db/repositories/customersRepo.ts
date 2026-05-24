@@ -2,6 +2,7 @@ import { execute, query } from "../sqlite";
 import { createId } from "../../utils/ids";
 import { nowIso } from "../../utils/dates";
 import type { Customer, CustomerInput } from "../../../types/customer";
+import { normalizePhone } from "../../utils/phone";
 
 export type CustomerQuickFilter = "recent" | "imported" | "withVehicles" | "openTickets";
 
@@ -57,11 +58,14 @@ function customerSearchWhere(queryText: string, filters: CustomerSearchFilters, 
   const trimmed = queryText.trim();
   if (trimmed) {
     const like = `%${trimmed}%`;
+    const phoneDigits = normalizePhone(trimmed);
+    const phoneLike = `%${phoneDigits}%`;
     clauses.push(`(
       c.first_name LIKE ?
       OR c.last_name LIKE ?
       OR (c.first_name || ' ' || c.last_name) LIKE ?
       OR c.phone LIKE ?
+      OR (? != '' AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(c.phone, '-', ''), '(', ''), ')', ''), ' ', ''), '.', '') LIKE ?)
       OR c.email LIKE ?
       OR EXISTS (
         SELECT 1 FROM vehicles v
@@ -76,7 +80,7 @@ function customerSearchWhere(queryText: string, filters: CustomerSearchFilters, 
           )
       )
     )`);
-    params.push(like, like, like, like, like, like, like, like, like, like);
+    params.push(like, like, like, like, phoneDigits, phoneLike, like, like, like, like, like, like);
   }
   if (filters.imported) clauses.push("COALESCE(c.is_imported, 0) = 1");
   if (filters.withVehicles) clauses.push("EXISTS (SELECT 1 FROM vehicles v WHERE v.customer_id = c.id AND v.deleted_at IS NULL)");

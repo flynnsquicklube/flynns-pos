@@ -9,6 +9,11 @@ export interface Vehicle {
   model: string | null;
   mileage: number | null;
   oil_type: string | null;
+  oil_capacity?: number | null;
+  oil_filter_sku?: string | null;
+  oil_filter_inventory_item_id?: string | null;
+  last_oil_change_date?: string | null;
+  last_oil_change_mileage?: number | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

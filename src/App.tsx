@@ -29,7 +29,7 @@ function renderPage(route: Route, navigate: (page: PageKey, entityId?: string) =
     case "start-order":
       return <StartOrderPage onNavigate={navigate} />;
     case "order-wizard":
-      return <OrderWizardPage onCreated={(id) => navigate("ticket-detail", id)} />;
+      return <OrderWizardPage onCreated={(id) => navigate("ticket-detail", id)} onBackToStart={() => navigate("start-order")} />;
     case "order-history":
       return <OrderHistoryPage onOpenTicket={(id) => navigate("ticket-detail", id)} />;
     case "active-bays":
@@ -45,7 +45,7 @@ function renderPage(route: Route, navigate: (page: PageKey, entityId?: string) =
     case "tickets":
       return <TicketsPage onOpenTicket={(id) => navigate("ticket-detail", id)} />;
     case "ticket-detail":
-      return <TicketDetailPage ticketId={route.entityId} onBack={() => navigate("order-history")} />;
+      return <TicketDetailPage ticketId={route.entityId} onBack={() => navigate("order-history")} onStartTicket={() => navigate("order-wizard")} />;
     case "customers":
       return <CustomersPage initialCustomerId={route.entityId} onStartTicket={() => navigate("order-wizard")} />;
     case "vehicles":
