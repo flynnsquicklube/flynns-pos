@@ -1,9 +1,10 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import isDev from "electron-is-dev";
 import Database from "better-sqlite3";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { schemaStatements, seedCatalogItems, seedInventoryItems, seedServicePackages, seedServices } from "../src/lib/db/schema.js";
+import { columnMigrations, schemaStatements, seedCatalogItems, seedInventoryItems, seedServicePackages, seedServices } from "../src/lib/db/schema.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,66 +30,29 @@ function initializeDatabase() {
   db.pragma("foreign_keys = ON");
 
   const database = getDatabase();
-  const ensureColumn = (table: string, column: string, definition: string) => {
-    const columns = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (!columns.some((existing) => existing.name === column)) {
-      database.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
+  const getTableColumns = (tableName: string) => database.prepare(`PRAGMA table_info(${tableName})`).all() as { name: string }[];
+  const columnExists = (tableName: string, columnName: string) => getTableColumns(tableName).some((existing) => existing.name === columnName);
+  const addColumnIfMissing = (tableName: string, columnName: string, columnDefinition: string) => {
+    if (!columnExists(tableName, columnName)) {
+      console.info(`[SQLite migration] Adding ${tableName}.${columnName} ${columnDefinition}`);
+      database.prepare(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`).run();
     }
   };
+  const tableStatements = schemaStatements.filter((statement) => !statement.trim().toUpperCase().startsWith("CREATE INDEX"));
+  const indexStatements = schemaStatements.filter((statement) => statement.trim().toUpperCase().startsWith("CREATE INDEX"));
 
   const migrate = database.transaction(() => {
-    for (const statement of schemaStatements) {
+    for (const statement of tableStatements) {
       database.prepare(statement).run();
     }
 
-    ensureColumn("tickets", "customer_concern", "TEXT NULL");
-    ensureColumn("tickets", "technician_notes", "TEXT NULL");
-    ensureColumn("tickets", "internal_notes", "TEXT NULL");
-    ensureColumn("tickets", "bay", "TEXT NULL");
-    ensureColumn("tickets", "completed_at", "TEXT NULL");
-    ensureColumn("tickets", "payment_status", "TEXT NOT NULL DEFAULT 'unpaid'");
-    ensureColumn("tickets", "external_source", "TEXT NULL");
-    ensureColumn("tickets", "external_id", "TEXT NULL");
-    ensureColumn("tickets", "is_imported", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn("tickets", "original_import_json", "TEXT NULL");
-    ensureColumn("tickets", "imported_at", "TEXT NULL");
-    ensureColumn("ticket_items", "item_type", "TEXT NULL");
-    ensureColumn("ticket_items", "package_id", "TEXT NULL");
-    ensureColumn("ticket_items", "inventory_item_id", "TEXT NULL");
-    ensureColumn("ticket_items", "external_source", "TEXT NULL");
-    ensureColumn("ticket_items", "external_id", "TEXT NULL");
-    ensureColumn("ticket_items", "is_imported", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn("ticket_items", "original_import_json", "TEXT NULL");
-    ensureColumn("payments", "paid_at", "TEXT NULL");
-    ensureColumn("payments", "external_source", "TEXT NULL");
-    ensureColumn("payments", "external_id", "TEXT NULL");
-    ensureColumn("payments", "is_imported", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn("customers", "external_source", "TEXT NULL");
-    ensureColumn("customers", "external_id", "TEXT NULL");
-    ensureColumn("customers", "is_imported", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn("vehicles", "external_source", "TEXT NULL");
-    ensureColumn("vehicles", "external_id", "TEXT NULL");
-    ensureColumn("vehicles", "is_imported", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn("vehicles", "sub_model", "TEXT NULL");
-    ensureColumn("service_history", "external_source", "TEXT NULL");
-    ensureColumn("service_history", "external_id", "TEXT NULL");
-    ensureColumn("service_history", "is_imported", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn("inventory_items", "external_source", "TEXT NULL");
-    ensureColumn("inventory_items", "external_id", "TEXT NULL");
-    ensureColumn("inventory_items", "is_imported", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn("inventory_items", "product_id", "TEXT NULL");
-    ensureColumn("inventory_items", "product_type", "TEXT NULL");
-    ensureColumn("inventory_items", "inventory_type", "TEXT NULL");
-    ensureColumn("inventory_items", "measurement", "TEXT NULL");
-    ensureColumn("inventory_items", "viscosity", "TEXT NULL");
-    ensureColumn("inventory_items", "oil_formulation", "TEXT NULL");
-    ensureColumn("inventory_items", "quantity_sold_last_30_days", "REAL NULL");
-    ensureColumn("inventory_items", "replacement_cost", "REAL NULL");
-    ensureColumn("inventory_items", "avg_cost", "REAL NULL");
-    ensureColumn("inventory_items", "min_quantity", "REAL NULL");
-    ensureColumn("inventory_items", "max_quantity", "REAL NULL");
-    ensureColumn("inventory_items", "sequence_id", "TEXT NULL");
-    ensureColumn("inventory_items", "original_import_json", "TEXT NULL");
+    for (const migration of columnMigrations) {
+      addColumnIfMissing(migration.tableName, migration.columnName, migration.columnDefinition);
+    }
+
+    for (const statement of indexStatements) {
+      database.prepare(statement).run();
+    }
 
     const seeded = database
       .prepare("SELECT value FROM app_settings WHERE key = ?")
@@ -177,11 +141,18 @@ function createWindow() {
     title: "Flynn's Quick Lube POS",
     backgroundColor: "#090d12",
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: false
     }
   });
+
+  if (isDev) {
+    mainWindow.webContents.on("console-message", (_event, _level, message) => {
+      console.log(`[renderer] ${message}`);
+    });
+  }
 
   if (isDev) {
     void mainWindow.loadURL("http://127.0.0.1:5173");
@@ -213,7 +184,26 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle("db:transaction", (_event, statements: { sql: string; params?: unknown[] }[] = []) => {
+    try {
+      let changes = 0;
+      const runTransaction = getDatabase().transaction(() => {
+        for (const statement of statements) {
+          const result = getDatabase().prepare(statement.sql).run(...(statement.params ?? []));
+          changes += result.changes;
+        }
+      });
+      runTransaction();
+      return { changes };
+    } catch (error) {
+      console.error("SQLite transaction failed", error);
+      throw error;
+    }
+  });
+
   ipcMain.handle("db:info", () => ({ path: dbPath, ready: true }));
+  ipcMain.handle("db:getPath", () => dbPath);
+  ipcMain.handle("file:readText", async (_event, filePath: string) => fs.readFile(filePath, "utf8"));
 
   createWindow();
 

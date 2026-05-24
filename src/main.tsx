@@ -3,6 +3,10 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles.css";
 
+if (import.meta.env.DEV) {
+  console.log("[renderer] flynnsPOS bridge", window.flynnsPOS);
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

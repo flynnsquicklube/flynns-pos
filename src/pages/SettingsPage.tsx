@@ -4,6 +4,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { useToast } from "../components/ui/useToast";
+import { getElectronBridgeDebug, isDesktopDatabaseAvailable, type ElectronBridgeDebug } from "../lib/db/sqlite";
 import { createCatalogItem, listCatalogItems, updateCatalogItem } from "../lib/db/repositories/catalogRepo";
 import { getImportHistoryEntry, listImportBatches } from "../lib/db/repositories/importRepo";
 import { listPackages, updatePackage } from "../lib/db/repositories/packagesRepo";
@@ -43,9 +44,11 @@ export function SettingsPage() {
   const [importing, setImporting] = useState(false);
   const [importHistory, setImportHistory] = useState<ImportBatch[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<ImportHistoryEntry | null>(null);
+  const [bridgeDebug, setBridgeDebug] = useState<ElectronBridgeDebug>(() => getElectronBridgeDebug());
   const { notify } = useToast();
 
   useEffect(() => {
+    setBridgeDebug(getElectronBridgeDebug());
     getLocalStatus().then(setStatus).catch(() => setStatus(null));
     getSetting("tax_rate").then((setting) => setTaxRate(setting?.value ?? "0")).catch(() => setTaxRate("0"));
     listPackages().then(setPackages).catch(() => setPackages([]));
@@ -93,6 +96,13 @@ export function SettingsPage() {
 
   const previewOrders = async () => {
     if (!ordersFile) return;
+    if (!isDesktopDatabaseAvailable()) {
+      const message = getElectronBridgeDebug().userAgent.includes("Electron")
+        ? "Electron window opened, but preload bridge is missing. Check preload.ts and BrowserWindow webPreferences."
+        : "Local SQLite is available in the Electron desktop app. Start with npm run electron:dev.";
+      notify({ tone: "error", title: "SQLite bridge missing", message });
+      return;
+    }
     try {
       setOrdersPreview(await previewDroptopOrders(ordersFile.text));
       notify({ tone: "success", title: "Orders preview ready", message: ordersFile.name });
@@ -103,6 +113,10 @@ export function SettingsPage() {
 
   const runOrdersImport = async () => {
     if (!ordersFile) return;
+    if (!isDesktopDatabaseAvailable()) {
+      notify({ tone: "error", title: "SQLite bridge missing", message: "Electron SQLite is not connected." });
+      return;
+    }
     setImporting(true);
     try {
       const result = await importDroptopOrders(ordersFile.text, ordersFile.name);
@@ -118,6 +132,13 @@ export function SettingsPage() {
 
   const previewInventory = async () => {
     if (!inventoryFile) return;
+    if (!isDesktopDatabaseAvailable()) {
+      const message = getElectronBridgeDebug().userAgent.includes("Electron")
+        ? "Electron window opened, but preload bridge is missing. Check preload.ts and BrowserWindow webPreferences."
+        : "Local SQLite is available in the Electron desktop app. Start with npm run electron:dev.";
+      notify({ tone: "error", title: "SQLite bridge missing", message });
+      return;
+    }
     try {
       setInventoryPreview(await previewDroptopInventory(inventoryFile.text));
       notify({ tone: "success", title: "Inventory preview ready", message: inventoryFile.name });
@@ -128,6 +149,10 @@ export function SettingsPage() {
 
   const runInventoryImport = async () => {
     if (!inventoryFile) return;
+    if (!isDesktopDatabaseAvailable()) {
+      notify({ tone: "error", title: "SQLite bridge missing", message: "Electron SQLite is not connected." });
+      return;
+    }
     setImporting(true);
     try {
       const result = await importDroptopInventory(inventoryFile.text, inventoryFile.name);
@@ -197,6 +222,26 @@ export function SettingsPage() {
       ) : null}
       {activeTab === "Import Data" ? (
         <div className="space-y-5">
+          <Card className="p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-bold text-slate-950">Local SQLite Connection</div>
+                <div className="mt-1 text-sm text-slate-500">
+                  {bridgeDebug.databaseAvailable
+                    ? "Electron SQLite connected."
+                    : bridgeDebug.userAgent.includes("Electron")
+                      ? "Electron window opened, but preload bridge is missing. Check preload.ts and BrowserWindow webPreferences."
+                      : "Local SQLite is available in the Electron desktop app. Start with npm run electron:dev."}
+                </div>
+              </div>
+              <Badge tone={bridgeDebug.databaseAvailable ? "green" : "red"}>{bridgeDebug.databaseAvailable ? "Connected" : "Not Connected"}</Badge>
+            </div>
+            {import.meta.env.DEV ? (
+              <div className="mt-3 rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-500">
+                isElectronBridgeDetected={String(bridgeDebug.isElectronBridgeDetected)} · databaseAvailable={String(bridgeDebug.databaseAvailable)} · legacyBridgeDetected={String(bridgeDebug.legacyBridgeDetected)} · userAgent={bridgeDebug.userAgent}
+              </div>
+            ) : null}
+          </Card>
           <div className="grid gap-5 xl:grid-cols-2">
             <Card className="p-5">
               <h3 className="text-lg font-bold text-slate-950">Import Droptop Orders CSV</h3>

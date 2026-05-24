@@ -344,6 +344,69 @@ export const schemaStatements = [
   "CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status)"
 ];
 
+export interface ColumnMigration {
+  tableName: string;
+  columnName: string;
+  columnDefinition: string;
+}
+
+export const columnMigrations: ColumnMigration[] = [
+  { tableName: "tickets", columnName: "bay", columnDefinition: "TEXT NULL" },
+  { tableName: "tickets", columnName: "customer_concern", columnDefinition: "TEXT NULL" },
+  { tableName: "tickets", columnName: "technician_notes", columnDefinition: "TEXT NULL" },
+  { tableName: "tickets", columnName: "internal_notes", columnDefinition: "TEXT NULL" },
+  { tableName: "tickets", columnName: "completed_at", columnDefinition: "TEXT NULL" },
+  { tableName: "tickets", columnName: "payment_status", columnDefinition: "TEXT NOT NULL DEFAULT 'unpaid'" },
+  { tableName: "tickets", columnName: "external_source", columnDefinition: "TEXT NULL" },
+  { tableName: "tickets", columnName: "external_id", columnDefinition: "TEXT NULL" },
+  { tableName: "tickets", columnName: "is_imported", columnDefinition: "INTEGER NOT NULL DEFAULT 0" },
+  { tableName: "tickets", columnName: "original_import_json", columnDefinition: "TEXT NULL" },
+  { tableName: "tickets", columnName: "imported_at", columnDefinition: "TEXT NULL" },
+
+  { tableName: "customers", columnName: "external_source", columnDefinition: "TEXT NULL" },
+  { tableName: "customers", columnName: "external_id", columnDefinition: "TEXT NULL" },
+  { tableName: "customers", columnName: "is_imported", columnDefinition: "INTEGER NOT NULL DEFAULT 0" },
+
+  { tableName: "vehicles", columnName: "external_source", columnDefinition: "TEXT NULL" },
+  { tableName: "vehicles", columnName: "external_id", columnDefinition: "TEXT NULL" },
+  { tableName: "vehicles", columnName: "is_imported", columnDefinition: "INTEGER NOT NULL DEFAULT 0" },
+  { tableName: "vehicles", columnName: "sub_model", columnDefinition: "TEXT NULL" },
+
+  { tableName: "ticket_items", columnName: "item_type", columnDefinition: "TEXT NULL" },
+  { tableName: "ticket_items", columnName: "package_id", columnDefinition: "TEXT NULL" },
+  { tableName: "ticket_items", columnName: "inventory_item_id", columnDefinition: "TEXT NULL" },
+  { tableName: "ticket_items", columnName: "external_source", columnDefinition: "TEXT NULL" },
+  { tableName: "ticket_items", columnName: "external_id", columnDefinition: "TEXT NULL" },
+  { tableName: "ticket_items", columnName: "is_imported", columnDefinition: "INTEGER NOT NULL DEFAULT 0" },
+  { tableName: "ticket_items", columnName: "original_import_json", columnDefinition: "TEXT NULL" },
+
+  { tableName: "payments", columnName: "paid_at", columnDefinition: "TEXT NULL" },
+  { tableName: "payments", columnName: "external_source", columnDefinition: "TEXT NULL" },
+  { tableName: "payments", columnName: "external_id", columnDefinition: "TEXT NULL" },
+  { tableName: "payments", columnName: "is_imported", columnDefinition: "INTEGER NOT NULL DEFAULT 0" },
+
+  { tableName: "service_history", columnName: "external_source", columnDefinition: "TEXT NULL" },
+  { tableName: "service_history", columnName: "external_id", columnDefinition: "TEXT NULL" },
+  { tableName: "service_history", columnName: "is_imported", columnDefinition: "INTEGER NOT NULL DEFAULT 0" },
+
+  { tableName: "inventory_items", columnName: "external_source", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "external_id", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "is_imported", columnDefinition: "INTEGER NOT NULL DEFAULT 0" },
+  { tableName: "inventory_items", columnName: "product_id", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "product_type", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "inventory_type", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "measurement", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "viscosity", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "oil_formulation", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "quantity_sold_last_30_days", columnDefinition: "REAL NULL" },
+  { tableName: "inventory_items", columnName: "replacement_cost", columnDefinition: "REAL NULL" },
+  { tableName: "inventory_items", columnName: "avg_cost", columnDefinition: "REAL NULL" },
+  { tableName: "inventory_items", columnName: "min_quantity", columnDefinition: "REAL NULL" },
+  { tableName: "inventory_items", columnName: "max_quantity", columnDefinition: "REAL NULL" },
+  { tableName: "inventory_items", columnName: "sequence_id", columnDefinition: "TEXT NULL" },
+  { tableName: "inventory_items", columnName: "original_import_json", columnDefinition: "TEXT NULL" }
+];
+
 export const seedServices = [
   ["synthetic-blend-oil-change", "Synthetic Blend Oil Change", "Oil Change", 64.99, 1, 1],
   ["full-synthetic-oil-change", "Full Synthetic Oil Change", "Oil Change", 84.99, 1, 1],

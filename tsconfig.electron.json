@@ -11,5 +11,5 @@
     "types": ["node"],
     "sourceMap": true
   },
-  "include": ["electron/**/*.ts", "src/lib/db/schema.ts", "src/lib/utils/ids.ts"]
+  "include": ["electron/**/*.ts", "electron/**/*.cts", "src/lib/db/schema.ts", "src/lib/utils/ids.ts"]
 }
