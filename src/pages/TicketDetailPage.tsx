@@ -20,11 +20,13 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
-import { cancelTicket, completeTicket, getTicketById, reopenTicket, startService, updateTicketStatus } from "../lib/db/repositories/ticketsRepo";
+import { PosCustomerCard, PosStatusProgress, PosVehicleCard } from "../components/pos";
+import { addTicketItem, cancelTicket, completeTicket, getTicketById, markWaitingPayment, removeTicketItem, reopenTicket, startService, updateTicketNotes } from "../lib/db/repositories/ticketsRepo";
 import { getServiceHistoryByVehicle } from "../lib/db/repositories/serviceHistoryRepo";
+import { getPaymentsByTicket } from "../lib/db/repositories/paymentsRepo";
 import { formatMoney } from "../lib/utils/money";
 import { useToast } from "../components/ui/useToast";
-import type { PaymentMethod } from "../types/payment";
+import type { Payment, PaymentMethod } from "../types/payment";
 import type { TicketStatus, TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
 
@@ -72,6 +74,10 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
   const [oilType, setOilType] = useState("");
   const [bay, setBay] = useState("Bay 1");
   const [history, setHistory] = useState<ServiceHistory[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [editNotes, setEditNotes] = useState(false);
+  const [notesForm, setNotesForm] = useState({ customer_concern: "", technician_notes: "", internal_notes: "" });
+  const [customItem, setCustomItem] = useState({ name: "", quantity: "1", unit_price: "0", taxable: true });
   const { notify } = useToast();
 
   const loadTicket = () => {
@@ -88,6 +94,12 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
         setFinalMileage(result?.vehicle_mileage ? String(result.vehicle_mileage) : "");
         setOilType(result?.vehicle_oil_type ?? "");
         if (result?.bay) setBay(result.bay);
+        setNotesForm({
+          customer_concern: result?.customer_concern ?? "",
+          technician_notes: result?.technician_notes ?? "",
+          internal_notes: result?.internal_notes ?? ""
+        });
+        if (result?.id) getPaymentsByTicket(result.id).then(setPayments).catch(() => setPayments([]));
         if (result?.vehicle_id) {
           getServiceHistoryByVehicle(result.vehicle_id).then(setHistory).catch(() => setHistory([]));
         }
@@ -126,6 +138,30 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
 
   const customerName = [ticket.customer_first_name, ticket.customer_last_name].filter(Boolean).join(" ") || "Walk-in";
   const vehicleName = [ticket.vehicle_year, ticket.vehicle_make, ticket.vehicle_model].filter(Boolean).join(" ") || "Vehicle";
+  const locked = ticket.status === "completed";
+  const changeDue = paymentMethod === "Cash" && Number(paymentAmount) > ticket.total ? Number(paymentAmount) - ticket.total : 0;
+  const saveNotes = () => runAction(async () => {
+    await updateTicketNotes(ticket.id, {
+      customer_concern: notesForm.customer_concern || null,
+      technician_notes: notesForm.technician_notes || null,
+      internal_notes: notesForm.internal_notes || null
+    });
+    setEditNotes(false);
+  });
+  const addCustomItem = () => runAction(async () => {
+    if (!customItem.name.trim()) throw new Error("Item name is required.");
+    await addTicketItem(ticket.id, {
+      service_id: null,
+      item_type: "custom",
+      package_id: null,
+      inventory_item_id: null,
+      name: customItem.name.trim(),
+      quantity: Math.max(Number(customItem.quantity) || 1, 0.1),
+      unit_price: Number(customItem.unit_price) || 0,
+      taxable: customItem.taxable ? 1 : 0
+    });
+    setCustomItem({ name: "", quantity: "1", unit_price: "0", taxable: true });
+  });
 
   return (
     <section className="space-y-5">
@@ -141,11 +177,17 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
       </div>
       {error ? <Card className="p-4 text-sm text-red-700">{error}</Card> : null}
 
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_360px]">
+        <PosCustomerCard customer={{ name: customerName, phone: ticket.customer_phone, email: ticket.customer_email }} />
+        <PosVehicleCard vehicle={{ label: vehicleName, vin: ticket.vehicle_vin, plate: ticket.vehicle_plate, mileage: ticket.vehicle_mileage, oilType: ticket.vehicle_oil_type }} />
+        <PosStatusProgress status={ticket.status} />
+      </div>
+
       <div className="grid gap-3 md:grid-cols-4 xl:grid-cols-11">
         {actionTiles.map(([label, Icon]) => (
-          <button key={label} className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white p-3 text-center text-xs font-semibold text-slate-500 opacity-70 shadow-sm">
+          <button key={label} disabled className="flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-center text-xs font-semibold text-slate-400 opacity-70 shadow-sm">
             <Icon className="text-[var(--brand-primary)]" size={20} />
-            {label}
+            {label}<span className="text-[10px]">Coming Soon</span>
           </button>
         ))}
       </div>
@@ -193,11 +235,21 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
               </div>
             ) : null}
             <div className="mb-3 flex flex-wrap gap-2">
-              <Button variant="secondary">Add Inventory Item</Button>
-              <Button variant="secondary">Add Custom Item</Button>
-              <Button variant="secondary">Add Discount</Button>
-              <Button variant="secondary" icon={<Tag size={16} />}>Add Coupon</Button>
+              <Button variant="secondary" disabled>Add Inventory Item Coming Soon</Button>
+              <Button variant="secondary" disabled>Add Discount Coming Soon</Button>
+              <Button variant="secondary" disabled icon={<Tag size={16} />}>Add Coupon Coming Soon</Button>
             </div>
+            {!locked ? (
+              <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="grid gap-3 md:grid-cols-[1fr_90px_120px_110px_auto]">
+                  <Input label="Custom item" value={customItem.name} onChange={(event) => setCustomItem({ ...customItem, name: event.target.value })} />
+                  <Input label="Qty" type="number" value={customItem.quantity} onChange={(event) => setCustomItem({ ...customItem, quantity: event.target.value })} />
+                  <Input label="Price" type="number" step="0.01" value={customItem.unit_price} onChange={(event) => setCustomItem({ ...customItem, unit_price: event.target.value })} />
+                  <label className="mt-7 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={customItem.taxable} onChange={(event) => setCustomItem({ ...customItem, taxable: event.target.checked })} />Taxable</label>
+                  <Button className="mt-7" onClick={addCustomItem}>Add Item</Button>
+                </div>
+              </div>
+            ) : null}
             <div className="overflow-hidden rounded-lg border border-slate-200">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -214,7 +266,10 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
                       <td className="border-t border-slate-100 px-4 py-3 font-medium text-slate-950">{item.name}</td>
                       <td className="border-t border-slate-100 px-4 py-3 text-right">{item.quantity}</td>
                       <td className="border-t border-slate-100 px-4 py-3 text-right">{formatMoney(item.unit_price)}</td>
-                      <td className="border-t border-slate-100 px-4 py-3 text-right font-semibold">{formatMoney(item.line_total)}</td>
+                      <td className="border-t border-slate-100 px-4 py-3 text-right font-semibold">
+                        {formatMoney(item.line_total)}
+                        {!locked ? <button className="ml-3 text-xs font-bold text-red-600" onClick={() => runAction(() => removeTicketItem(ticket.id, item.id))}>Remove</button> : null}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -222,10 +277,21 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-[1fr_280px]">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div className="font-semibold text-slate-950">Notes</div>
-                <p className="mt-2 text-sm text-slate-600">Concern: {ticket.customer_concern || "None"}</p>
-                <p className="mt-1 text-sm text-slate-600">Tech: {ticket.technician_notes || "None"}</p>
-                <p className="mt-1 text-sm text-slate-600">Internal: {ticket.internal_notes || "None"}</p>
+                <div className="flex items-center justify-between"><div className="font-semibold text-slate-950">Notes</div>{!locked ? <Button size="sm" variant="secondary" onClick={() => setEditNotes((value) => !value)}>{editNotes ? "Cancel" : "Edit Notes"}</Button> : null}</div>
+                {editNotes ? (
+                  <div className="mt-3 grid gap-2">
+                    <Input label="Customer concern" value={notesForm.customer_concern} onChange={(event) => setNotesForm({ ...notesForm, customer_concern: event.target.value })} />
+                    <Input label="Technician notes" value={notesForm.technician_notes} onChange={(event) => setNotesForm({ ...notesForm, technician_notes: event.target.value })} />
+                    <Input label="Internal notes" value={notesForm.internal_notes} onChange={(event) => setNotesForm({ ...notesForm, internal_notes: event.target.value })} />
+                    <Button size="sm" onClick={saveNotes}>Save Notes</Button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mt-2 text-sm text-slate-600">Concern: {ticket.customer_concern || "None"}</p>
+                    <p className="mt-1 text-sm text-slate-600">Tech: {ticket.technician_notes || "None"}</p>
+                    <p className="mt-1 text-sm text-slate-600">Internal: {ticket.internal_notes || "None"}</p>
+                  </>
+                )}
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>{formatMoney(ticket.subtotal)}</span></div>
@@ -257,7 +323,7 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
                   <Button disabled={saving} icon={<Play size={16} />} onClick={() => runAction(() => startService(ticket.id, bay))}>Start Service</Button>
                 </div>
               ) : null}
-              {ticket.status === "in_service" ? <Button disabled={saving} icon={<CheckCircle2 size={16} />} onClick={() => runAction(() => updateTicketStatus(ticket.id, "waiting_payment"))}>Mark Waiting Payment</Button> : null}
+              {ticket.status === "in_service" ? <Button disabled={saving} icon={<CheckCircle2 size={16} />} onClick={() => runAction(() => markWaitingPayment(ticket.id))}>Mark Waiting Payment</Button> : null}
               {ticket.status === "waiting_payment" ? (
                 <div className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
                   <label className="block text-sm font-semibold text-slate-700">
@@ -281,6 +347,7 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
                     Oil type optional
                     <Input className="mt-2" value={oilType} onChange={(event) => setOilType(event.target.value)} />
                   </label>
+                  {changeDue > 0 ? <div className="rounded-md border border-green-200 bg-green-50 p-2 text-sm font-semibold text-green-700">Change due: {formatMoney(changeDue)}</div> : null}
                   <Button disabled={saving} variant="success" icon={<CheckCircle2 size={16} />} onClick={() => runAction(() => completeTicket(ticket.id, { paymentMethod, paymentAmount: paymentAmount ? Number(paymentAmount) : undefined, finalMileage: Number(finalMileage), oilType: oilType.trim() || null }))}>Complete Ticket</Button>
                 </div>
               ) : null}
@@ -290,6 +357,21 @@ export function TicketDetailPage({ ticketId, onBack }: TicketDetailPageProps) {
           </Card>
         </div>
       </div>
+      <Card className="p-5">
+        <h3 className="text-lg font-bold text-slate-950">Payments</h3>
+        {payments.length === 0 ? <p className="mt-3 text-sm text-slate-500">No payments recorded.</p> : (
+          <div className="mt-3 divide-y divide-slate-100">
+            {payments.map((payment) => (
+              <div key={payment.id} className="grid gap-2 py-3 text-sm md:grid-cols-[160px_120px_120px_1fr]">
+                <div className="font-semibold text-slate-950">{new Date(payment.paid_at).toLocaleDateString()}</div>
+                <div>{payment.method}</div>
+                <div className="font-bold">{formatMoney(payment.amount)}</div>
+                <div className="text-slate-500">{payment.status}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
       <Card className="p-5">
         <h3 className="text-lg font-bold text-slate-950">Vehicle Service History</h3>
         {history.length === 0 ? (

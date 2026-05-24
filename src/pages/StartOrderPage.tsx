@@ -18,19 +18,22 @@ export function StartOrderPage({ onNavigate }: StartOrderPageProps) {
     <section className="flex min-h-[calc(100vh-140px)] items-center justify-center">
       <Card className="w-full max-w-5xl p-10">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-slate-950">Choose a Starting Point</h1>
-          <p className="mt-2 text-sm text-slate-500">Start the order from the fastest piece of information in front of the advisor.</p>
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--pos-blue)] text-white pos-glow">
+            <ClipboardPlus size={34} />
+          </div>
+          <h1 className="text-3xl font-black text-[var(--pos-text)]">Choose a Starting Point</h1>
+          <p className="mt-2 text-sm text-[var(--pos-muted)]">Start the order from the fastest piece of information in front of the advisor.</p>
         </div>
         <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {options.map((option) => {
             const Icon = option.icon;
             return (
-              <button key={option.label} onClick={() => onNavigate(option.page)} className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--brand-primary)] hover:shadow-md">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--brand-primary-light)] text-[var(--brand-primary)]">
+              <button key={option.label} onClick={() => onNavigate(option.page)} className="rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] p-6 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--pos-blue)] hover:bg-[var(--pos-card-hover)] hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--pos-blue-soft)]">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--pos-blue-soft)] text-[var(--pos-blue-2)]">
                   <Icon size={34} />
                 </div>
-                <div className="mt-5 text-lg font-bold text-slate-950">{option.label}</div>
-                <div className="mt-2 text-sm leading-5 text-slate-500">{option.subtitle}</div>
+                <div className="mt-5 text-lg font-black text-[var(--pos-text)]">{option.label}</div>
+                <div className="mt-2 text-sm leading-5 text-[var(--pos-muted)]">{option.subtitle}</div>
               </button>
             );
           })}

@@ -1,6 +1,9 @@
 import { query } from "../sqlite";
 import { todayIsoDate } from "../../utils/dates";
 import { getDashboardMetrics } from "./ticketsRepo";
+import { getReportRange, type ReportRangeKey } from "../../domain/reports/reportRanges";
+
+export type DateRangeKey = ReportRangeKey;
 
 export interface SalesSummary {
   grossSales: number;
@@ -8,6 +11,8 @@ export interface SalesSummary {
   taxCollected: number;
   taxableSales: number;
   completedTickets: number;
+  importedTickets: number;
+  localTickets: number;
 }
 
 export interface PaymentMethodTotal {
@@ -34,6 +39,12 @@ export interface PackageCount {
   total: number;
 }
 
+export interface OrderStatusSummary {
+  completed: number;
+  canceled: number;
+  active: number;
+}
+
 function dateClause(column: string, range: { dateFrom?: string; dateTo?: string }, params: unknown[]) {
   const clauses: string[] = [];
   if (range.dateFrom) {
@@ -47,6 +58,10 @@ function dateClause(column: string, range: { dateFrom?: string; dateTo?: string 
   return clauses;
 }
 
+export function rangeForKey(key: DateRangeKey): { dateFrom?: string; dateTo?: string; label: string } {
+  return getReportRange(key);
+}
+
 export const getTodayDashboardMetrics = getDashboardMetrics;
 
 export async function getSalesSummary(range: { dateFrom?: string; dateTo?: string } = {}): Promise<SalesSummary> {
@@ -58,12 +73,14 @@ export async function getSalesSummary(range: { dateFrom?: string; dateTo?: strin
       COALESCE(SUM(total - tax_total), 0) AS netSales,
       COALESCE(SUM(tax_total), 0) AS taxCollected,
       COALESCE(SUM(subtotal), 0) AS taxableSales,
-      COUNT(*) AS completedTickets
+      COUNT(*) AS completedTickets,
+      SUM(CASE WHEN is_imported = 1 THEN 1 ELSE 0 END) AS importedTickets,
+      SUM(CASE WHEN COALESCE(is_imported, 0) = 0 THEN 1 ELSE 0 END) AS localTickets
      FROM tickets
      WHERE ${clauses.join(" AND ")}`,
     params
   );
-  return row ?? { grossSales: 0, netSales: 0, taxCollected: 0, taxableSales: 0, completedTickets: 0 };
+  return row ?? { grossSales: 0, netSales: 0, taxCollected: 0, taxableSales: 0, completedTickets: 0, importedTickets: 0, localTickets: 0 };
 }
 
 export async function getPaymentMethodTotals(range: { dateFrom?: string; dateTo?: string } = {}): Promise<PaymentMethodTotal[]> {
@@ -133,7 +150,33 @@ export async function getPackageCounts(range: { dateFrom?: string; dateTo?: stri
   );
 }
 
+export async function getOrderStatusSummary(range: { dateFrom?: string; dateTo?: string } = {}): Promise<OrderStatusSummary> {
+  const params: unknown[] = [];
+  const clauses = ["deleted_at IS NULL", ...dateClause("COALESCE(completed_at, created_at)", range, params)];
+  const [row] = await query<OrderStatusSummary>(
+    `SELECT
+      SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN status = 'canceled' THEN 1 ELSE 0 END) AS canceled,
+      SUM(CASE WHEN status IN ('checked_in', 'in_service', 'waiting_payment') THEN 1 ELSE 0 END) AS active
+     FROM tickets
+     WHERE ${clauses.join(" AND ")}`,
+    params
+  );
+  return {
+    completed: row?.completed ?? 0,
+    canceled: row?.canceled ?? 0,
+    active: row?.active ?? 0
+  };
+}
+
+export async function getInventoryRetailTotal(): Promise<number> {
+  const [row] = await query<{ total: number }>(
+    "SELECT COALESCE(SUM(quantity_on_hand * retail_price), 0) AS total FROM inventory_items WHERE deleted_at IS NULL"
+  );
+  return row?.total ?? 0;
+}
+
 export function todayRange() {
   const date = todayIsoDate();
-  return { dateFrom: `${date}T00:00:00.000Z`, dateTo: `${date}T23:59:59.999Z` };
+  return { dateFrom: `${date}T00:00:00.000Z`, dateTo: `${date}T23:59:59.999Z`, label: "Today" };
 }

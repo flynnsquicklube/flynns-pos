@@ -19,9 +19,9 @@ import { TicketDetailPage } from "./pages/TicketDetailPage";
 import { VehiclesPage } from "./pages/VehiclesPage";
 import { ToastProvider } from "./components/ui/Toast";
 
-type Route = { page: PageKey; ticketId?: string };
+type Route = { page: PageKey; entityId?: string };
 
-function renderPage(route: Route, navigate: (page: PageKey, ticketId?: string) => void) {
+function renderPage(route: Route, navigate: (page: PageKey, entityId?: string) => void) {
   const activePage = route.page;
   switch (activePage) {
     case "overview":
@@ -45,11 +45,11 @@ function renderPage(route: Route, navigate: (page: PageKey, ticketId?: string) =
     case "tickets":
       return <TicketsPage onOpenTicket={(id) => navigate("ticket-detail", id)} />;
     case "ticket-detail":
-      return <TicketDetailPage ticketId={route.ticketId} onBack={() => navigate("order-history")} />;
+      return <TicketDetailPage ticketId={route.entityId} onBack={() => navigate("order-history")} />;
     case "customers":
-      return <CustomersPage />;
+      return <CustomersPage initialCustomerId={route.entityId} onStartTicket={() => navigate("order-wizard")} />;
     case "vehicles":
-      return <VehiclesPage />;
+      return <VehiclesPage initialVehicleId={route.entityId} onStartTicket={() => navigate("order-wizard")} />;
     case "inventory":
       return <InventoryPage />;
     case "reports":
@@ -63,11 +63,11 @@ function renderPage(route: Route, navigate: (page: PageKey, ticketId?: string) =
 
 export default function App() {
   const [route, setRoute] = useState<Route>({ page: "overview" });
-  const navigate = (page: PageKey, ticketId?: string) => setRoute({ page, ticketId });
+  const navigate = (page: PageKey, entityId?: string) => setRoute({ page, entityId });
 
   return (
     <ToastProvider>
-      <AppShell activePage={route.page === "ticket-detail" || route.page === "order-wizard" ? (route.page === "order-wizard" ? "start-order" : "order-history") : route.page} onNavigate={(page) => navigate(page)}>
+      <AppShell activePage={route.page === "ticket-detail" || route.page === "order-wizard" ? (route.page === "order-wizard" ? "start-order" : "order-history") : route.page} onNavigate={navigate}>
         {renderPage(route, navigate)}
       </AppShell>
     </ToastProvider>

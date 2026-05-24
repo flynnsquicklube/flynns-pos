@@ -5,15 +5,116 @@ import type { InventoryItem } from "../../../types/inventory";
 
 export type InventoryInput = Omit<InventoryItem, "id" | "created_at" | "updated_at" | "deleted_at" | "sync_status">;
 
+export interface InventoryStats {
+  totalItems: number;
+  importedItems: number;
+  lowStockItems: number;
+  oilFilters: number;
+  engineOils: number;
+}
+
+export interface InventorySearchFilters {
+  lowStock?: boolean;
+  oilFilters?: boolean;
+  engineOil?: boolean;
+  airFilters?: boolean;
+  cabinFilters?: boolean;
+  wipers?: boolean;
+  imported?: boolean;
+}
+
 export async function listInventoryItems(search = ""): Promise<InventoryItem[]> {
   const like = `%${search.trim()}%`;
   return query<InventoryItem>(
     `SELECT * FROM inventory_items
      WHERE deleted_at IS NULL
-       AND (? = '%%' OR sku LIKE ? OR name LIKE ? OR category LIKE ? OR vendor LIKE ?)
+       AND (? = '%%' OR sku LIKE ? OR product_id LIKE ? OR product_type LIKE ? OR name LIKE ? OR category LIKE ? OR vendor LIKE ? OR viscosity LIKE ? OR oil_formulation LIKE ? OR notes LIKE ?)
      ORDER BY name ASC`,
-    [like, like, like, like, like]
+    [like, like, like, like, like, like, like, like, like, like]
   );
+}
+
+function inventorySearchWhere(queryText: string, filters: InventorySearchFilters, params: unknown[]) {
+  const clauses = ["deleted_at IS NULL"];
+  const trimmed = queryText.trim();
+  if (trimmed) {
+    const like = `%${trimmed}%`;
+    clauses.push(`(
+      sku LIKE ?
+      OR product_id LIKE ?
+      OR barcode LIKE ?
+      OR name LIKE ?
+      OR product_type LIKE ?
+      OR inventory_type LIKE ?
+      OR category LIKE ?
+      OR vendor LIKE ?
+      OR viscosity LIKE ?
+      OR oil_formulation LIKE ?
+      OR notes LIKE ?
+    )`);
+    params.push(like, like, like, like, like, like, like, like, like, like, like);
+  }
+  if (filters.lowStock) clauses.push("quantity_on_hand <= reorder_point");
+  if (filters.imported) clauses.push("COALESCE(is_imported, 0) = 1");
+  if (filters.oilFilters) {
+    clauses.push("(name LIKE ? OR product_type LIKE ? OR category LIKE ? OR notes LIKE ?)");
+    params.push("%oil filter%", "%oil filter%", "%filter%", "%oil filter%");
+  }
+  if (filters.engineOil) {
+    clauses.push("(name LIKE ? OR product_type LIKE ? OR category LIKE ? OR inventory_type LIKE ?)");
+    params.push("%engine oil%", "%engine oil%", "%oil%", "%oil%");
+  }
+  if (filters.airFilters) {
+    clauses.push("(name LIKE ? OR product_type LIKE ? OR category LIKE ?)");
+    params.push("%air filter%", "%air filter%", "%filter%");
+  }
+  if (filters.cabinFilters) {
+    clauses.push("(name LIKE ? OR product_type LIKE ?)");
+    params.push("%cabin%", "%cabin%");
+  }
+  if (filters.wipers) {
+    clauses.push("(name LIKE ? OR product_type LIKE ? OR category LIKE ?)");
+    params.push("%wiper%", "%wiper%", "%wiper%");
+  }
+  return clauses.join(" AND ");
+}
+
+export async function getInventoryStats(): Promise<InventoryStats> {
+  const [row] = await query<InventoryStats>(
+    `SELECT
+      COUNT(*) AS totalItems,
+      COALESCE(SUM(CASE WHEN COALESCE(is_imported, 0) = 1 THEN 1 ELSE 0 END), 0) AS importedItems,
+      COALESCE(SUM(CASE WHEN quantity_on_hand <= reorder_point THEN 1 ELSE 0 END), 0) AS lowStockItems,
+      COALESCE(SUM(CASE WHEN LOWER(COALESCE(name, '') || ' ' || COALESCE(product_type, '') || ' ' || COALESCE(category, '')) LIKE '%oil filter%' THEN 1 ELSE 0 END), 0) AS oilFilters,
+      COALESCE(SUM(CASE WHEN LOWER(COALESCE(name, '') || ' ' || COALESCE(product_type, '') || ' ' || COALESCE(category, '') || ' ' || COALESCE(inventory_type, '')) LIKE '%engine oil%' THEN 1 ELSE 0 END), 0) AS engineOils
+     FROM inventory_items
+     WHERE deleted_at IS NULL`
+  );
+  return row ?? { totalItems: 0, importedItems: 0, lowStockItems: 0, oilFilters: 0, engineOils: 0 };
+}
+
+export async function searchInventoryAdvanced(queryText = "", filters: InventorySearchFilters = {}, limit = 50, offset = 0): Promise<InventoryItem[]> {
+  const params: unknown[] = [];
+  const where = inventorySearchWhere(queryText, filters, params);
+  params.push(limit, offset);
+  return query<InventoryItem>(
+    `SELECT * FROM inventory_items
+     WHERE ${where}
+     ORDER BY updated_at DESC, name ASC
+     LIMIT ? OFFSET ?`,
+    params
+  );
+}
+
+export async function listRecentlyActiveInventory(limit = 25): Promise<InventoryItem[]> {
+  return searchInventoryAdvanced("", {}, limit, 0);
+}
+
+export async function countInventorySearchResults(queryText = "", filters: InventorySearchFilters = {}): Promise<number> {
+  const params: unknown[] = [];
+  const where = inventorySearchWhere(queryText, filters, params);
+  const [row] = await query<{ count: number }>(`SELECT COUNT(*) AS count FROM inventory_items WHERE ${where}`, params);
+  return row?.count ?? 0;
 }
 
 export async function getInventoryItem(id: string): Promise<InventoryItem | null> {

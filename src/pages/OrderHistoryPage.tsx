@@ -6,6 +6,7 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { listOrderHistory } from "../lib/db/repositories/ticketsRepo";
+import { rangeForKey, type DateRangeKey } from "../lib/db/repositories/reportsRepo";
 import { formatMoney } from "../lib/utils/money";
 import type { TicketWithDetails } from "../types/ticket";
 
@@ -16,6 +17,9 @@ interface OrderHistoryPageProps {
 export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
   const [tickets, setTickets] = useState<TicketWithDetails[]>([]);
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [paymentStatus, setPaymentStatus] = useState("all");
+  const [rangeKey, setRangeKey] = useState<DateRangeKey>("all");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,21 +27,41 @@ export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
   }, []);
 
   const filtered = tickets.filter((ticket) => {
-    const haystack = `${ticket.customer_first_name ?? ""} ${ticket.customer_last_name ?? ""} ${ticket.vehicle_make ?? ""} ${ticket.vehicle_model ?? ""} ${ticket.vehicle_plate ?? ""} ${ticket.id}`.toLowerCase();
-    return haystack.includes(search.toLowerCase());
+    const haystack = `${ticket.customer_first_name ?? ""} ${ticket.customer_last_name ?? ""} ${ticket.vehicle_make ?? ""} ${ticket.vehicle_model ?? ""} ${ticket.vehicle_plate ?? ""} ${ticket.vehicle_vin ?? ""} ${ticket.id} ${ticket.service_names ?? ""}`.toLowerCase();
+    const range = rangeForKey(rangeKey);
+    const ticketDate = new Date(ticket.completed_at ?? ticket.created_at).getTime();
+    const inRange = (!range.dateFrom || ticketDate >= new Date(range.dateFrom).getTime()) && (!range.dateTo || ticketDate <= new Date(range.dateTo).getTime());
+    return inRange && haystack.includes(search.toLowerCase()) && (status === "all" || ticket.status === status) && (paymentStatus === "all" || ticket.payment_status === paymentStatus);
   });
 
   return (
     <section className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-slate-950">Order History</h1>
+        <h1 className="text-2xl font-bold text-slate-950">Orders</h1>
         <p className="text-sm text-slate-500">Review completed, open, and canceled orders.</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="secondary">All Operations</Button>
-        <Button variant="secondary">Dates</Button>
-        <Input className="max-w-sm" placeholder="Search orders" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <Button variant="secondary" icon={<SlidersHorizontal size={16} />}>Filters</Button>
+        <Button variant="secondary" disabled>All Operations</Button>
+        {(["today", "last7", "month", "all"] as DateRangeKey[]).map((key) => (
+          <Button key={key} variant={rangeKey === key ? "primary" : "secondary"} onClick={() => setRangeKey(key)}>{rangeForKey(key).label}</Button>
+        ))}
+        <Button variant="secondary" disabled>Custom Range Coming Soon</Button>
+        <select className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="all">All statuses</option>
+          <option value="checked_in">Checked In</option>
+          <option value="in_service">In Service</option>
+          <option value="waiting_payment">Waiting Payment</option>
+          <option value="completed">Completed</option>
+          <option value="canceled">Canceled</option>
+        </select>
+        <select className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
+          <option value="all">All pay statuses</option>
+          <option value="paid">Paid</option>
+          <option value="partial">Partial</option>
+          <option value="unpaid">Unpaid</option>
+        </select>
+        <Input className="max-w-sm" placeholder="Customer, vehicle, order ID, VIN, plate" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <Button variant="secondary" disabled icon={<SlidersHorizontal size={16} />}>More Filters Coming Soon</Button>
       </div>
       {error ? <Card className="p-4 text-sm text-red-700">{error}</Card> : null}
       <Card className="overflow-hidden">

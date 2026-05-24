@@ -403,6 +403,7 @@ export function OrderWizardPage({ onCreated }: OrderWizardPageProps) {
         <VehicleMethodStep
           onSelectVin={() => setState((current) => ({ ...current, vehicleMethod: "vin", vehicleSubstep: "vin", validation: null }))}
           onSelectPlate={() => setState((current) => ({ ...current, vehicleMethod: "plate", vehicleSubstep: "plate", validation: null }))}
+          onSelectManual={() => goToStep("specs")}
         />
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "vin" ? (
@@ -412,7 +413,7 @@ export function OrderWizardPage({ onCreated }: OrderWizardPageProps) {
           onChange={(vinInput) => setState((current) => ({ ...current, vinInput, specs: { ...current.specs, vin: vinInput } }))}
           onBack={() => setState((current) => ({ ...current, vehicleSubstep: "method", validation: null }))}
           onSearch={() => void applyVehicleLookup(state.vinInput, "No local VIN match found. Continue with manual specs.")}
-          onContinue={() => goToStep("specs")}
+          onContinue={() => setState((current) => ({ ...current, specs: { ...current.specs, vin: current.vinInput || current.specs.vin }, step: "specs", validation: null }))}
         />
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "plate" ? (
@@ -424,7 +425,7 @@ export function OrderWizardPage({ onCreated }: OrderWizardPageProps) {
           onStateChange={(plateState) => setState((current) => ({ ...current, plateState, specs: { ...current.specs, plate_state: plateState } }))}
           onBack={() => setState((current) => ({ ...current, vehicleSubstep: "method", validation: null }))}
           onSearch={() => void applyVehicleLookup(state.plateInput, "No local plate match found. Continue with manual specs.")}
-          onContinue={() => goToStep("specs")}
+          onContinue={() => setState((current) => ({ ...current, specs: { ...current.specs, plate: current.plateInput || current.specs.plate, plate_state: current.plateState }, step: "specs", validation: null }))}
         />
       ) : null}
       {state.step === "specs" ? (

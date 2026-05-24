@@ -32,10 +32,10 @@ export function PaymentsPage() {
         <p className="text-sm text-slate-500">Local payment records from completed tickets.</p>
       </div>
       <div className="flex flex-wrap gap-3">
-        <Button variant="secondary">All Operations</Button>
-        <Button variant="secondary">Dates</Button>
+        <Button variant="secondary" disabled>All Operations</Button>
+        <Button variant="secondary" disabled>Dates Coming Soon</Button>
         <Input className="max-w-sm" placeholder="Search payments" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <Button variant="secondary" icon={<SlidersHorizontal size={16} />}>Filters</Button>
+        <Button variant="secondary" disabled icon={<SlidersHorizontal size={16} />}>Filters Coming Soon</Button>
       </div>
       {error ? <Card className="p-4 text-sm text-red-700">{error}</Card> : null}
       {Object.keys(grouped).length === 0 ? (

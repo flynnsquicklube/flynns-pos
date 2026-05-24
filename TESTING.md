@@ -1,4 +1,101 @@
-# Flynn's POS Package Testing
+# Flynn's POS Testing Plan
+
+## Local Dev Startup
+
+1. Install dependencies with `npm install`.
+2. Start web dev with `npm run dev` for renderer-only checks.
+3. Start the desktop app with `npm run electron:dev` for SQLite/import testing.
+4. Confirm the Electron bridge status in **Settings > Import Data** says connected.
+
+## Imported Data Verification
+
+1. Go to **Customers** and search for a known imported customer by name or phone.
+2. Go to **Vehicles** and search by VIN or plate.
+3. Go to **Orders** and use **All Imported Data**.
+4. Go to **Inventory** and search by Product ID, brand, viscosity, or UPC.
+5. Go to **Reports** and confirm **All Imported Data** shows completed order totals.
+
+## Customer Search
+
+1. Open **Customers**.
+2. Confirm the page shows summary cards and recent customers only.
+3. Search by name, phone, email, plate, and VIN.
+4. Use **Imported**, **With Vehicles**, and **Open Tickets** filters.
+5. Open a customer detail.
+6. Click **Start Ticket** and confirm the guided ticket flow opens.
+
+## Vehicle Search
+
+1. Open **Vehicles**.
+2. Confirm the page shows summary cards and recent vehicles only.
+3. Search by VIN, plate, year, make, model, and customer name.
+4. Open vehicle detail and confirm service history/tickets show.
+5. Click **Start Ticket** and confirm the guided ticket flow opens.
+
+## Inventory Search
+
+1. Open **Inventory**.
+2. Confirm it shows summary cards and recently active items only.
+3. Search `OF`, `Service Champ`, `5W20`, and `Air Filter`.
+4. Use **Low Stock**, **Oil Filters**, **Engine Oil**, and **Imported** filters.
+5. Edit quantity on hand and confirm the save toast appears.
+
+## Start Ticket From VIN
+
+1. Go to **Start Ticket**.
+2. Choose **VIN**.
+3. Enter a known imported VIN or `TESTVIN123456789`.
+4. Confirm local lookup prefills when matched, otherwise manual specs entry works.
+
+## Start Ticket From Plate
+
+1. Go to **Start Ticket**.
+2. Choose **License Plate**.
+3. Search a known imported plate with state `OH`.
+4. Confirm local lookup prefills when matched, otherwise manual specs entry works.
+
+## Start Ticket From Customer / Vehicle
+
+1. Search a customer or vehicle.
+2. Click **Start Ticket**.
+3. Complete the guided flow: vehicle, specs, customer, services, review.
+4. Create the ticket and confirm it appears in **Active Bays**.
+
+## Complete Ticket
+
+1. Open a checked-in ticket.
+2. Start service in Bay 1.
+3. Mark Waiting Payment.
+4. Complete with Cash.
+5. Confirm payment, service history, vehicle mileage, Orders, Dashboard, and Reports update.
+
+## Reports
+
+1. Open **Reports**.
+2. Check Today, Last 7 Days, This Month, and All Imported Data.
+3. Confirm no metric shows `NaN` or `undefined`.
+
+## Services / Package Price Update
+
+1. Go to **Settings > Packages**.
+2. Change Synthetic Blend pricing.
+3. Create a new ticket and confirm the new price applies.
+4. Confirm old/imported orders preserve original totals.
+
+## Integration Placeholders
+
+1. Go to **Settings > Integrations**.
+2. Confirm VIN Decoder, Loyalty App Sync, Payments, Accounting, Messaging, and Plate Lookup show disabled/not configured states.
+3. Confirm setup buttons are disabled/Coming Soon.
+
+## What Is Not Connected Yet
+
+- Firebase loyalty/customer app sync.
+- Stripe or card terminal payment collection.
+- QuickBooks export.
+- Twilio/SMS/email delivery.
+- External plate lookup.
+- Print hardware, photos, signatures, and scanner hardware.
 
 ## Package Pricing Flow
 

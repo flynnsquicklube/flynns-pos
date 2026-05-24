@@ -3,6 +3,17 @@ import { createId } from "../../utils/ids";
 import { nowIso } from "../../utils/dates";
 import type { Vehicle, VehicleInput } from "../../../types/vehicle";
 
+export interface VehicleStats {
+  totalVehicles: number;
+  importedVehicles: number;
+  recentVehicles: number;
+}
+
+export interface VehicleSearchResult extends Vehicle {
+  customer_name: string | null;
+  last_visit: string | null;
+}
+
 export async function listVehicles(search = ""): Promise<Vehicle[]> {
   const like = `%${search.trim()}%`;
   return query<Vehicle>(
@@ -24,6 +35,69 @@ export async function searchVehicles(search = "", customerId?: string): Promise<
      ORDER BY updated_at DESC`,
     [customerId ?? null, customerId ?? null, like, like, like, like, like, like]
   );
+}
+
+export async function getVehicleStats(): Promise<VehicleStats> {
+  const [row] = await query<VehicleStats>(
+    `SELECT
+      COUNT(*) AS totalVehicles,
+      COALESCE(SUM(CASE WHEN COALESCE(is_imported, 0) = 1 THEN 1 ELSE 0 END), 0) AS importedVehicles,
+      COALESCE(SUM(CASE WHEN updated_at >= ? THEN 1 ELSE 0 END), 0) AS recentVehicles
+     FROM vehicles
+     WHERE deleted_at IS NULL`,
+    [new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()]
+  );
+  return row ?? { totalVehicles: 0, importedVehicles: 0, recentVehicles: 0 };
+}
+
+function vehicleSearchWhere(search: string, params: unknown[]) {
+  const clauses = ["v.deleted_at IS NULL"];
+  const trimmed = search.trim();
+  if (trimmed) {
+    const like = `%${trimmed}%`;
+    clauses.push(`(
+      v.vin LIKE ?
+      OR v.plate LIKE ?
+      OR CAST(v.year AS TEXT) LIKE ?
+      OR v.make LIKE ?
+      OR v.model LIKE ?
+      OR c.first_name LIKE ?
+      OR c.last_name LIKE ?
+      OR (c.first_name || ' ' || c.last_name) LIKE ?
+    )`);
+    params.push(like, like, like, like, like, like, like, like);
+  }
+  return clauses.join(" AND ");
+}
+
+export async function searchVehiclesAdvanced(search = "", limit = 50, offset = 0): Promise<VehicleSearchResult[]> {
+  const params: unknown[] = [];
+  const where = vehicleSearchWhere(search, params);
+  params.push(limit, offset);
+  return query<VehicleSearchResult>(
+    `SELECT v.*, (c.first_name || ' ' || c.last_name) AS customer_name,
+      (SELECT MAX(COALESCE(t.completed_at, t.created_at)) FROM tickets t WHERE t.vehicle_id = v.id AND t.deleted_at IS NULL) AS last_visit
+     FROM vehicles v
+     LEFT JOIN customers c ON c.id = v.customer_id
+     WHERE ${where}
+     ORDER BY COALESCE(last_visit, v.updated_at) DESC
+     LIMIT ? OFFSET ?`,
+    params
+  );
+}
+
+export async function listRecentVehicles(limit = 10): Promise<VehicleSearchResult[]> {
+  return searchVehiclesAdvanced("", limit, 0);
+}
+
+export async function countVehicleSearchResults(search = ""): Promise<number> {
+  const params: unknown[] = [];
+  const where = vehicleSearchWhere(search, params);
+  const [row] = await query<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM vehicles v LEFT JOIN customers c ON c.id = v.customer_id WHERE ${where}`,
+    params
+  );
+  return row?.count ?? 0;
 }
 
 export async function getVehicle(id: string): Promise<Vehicle | null> {

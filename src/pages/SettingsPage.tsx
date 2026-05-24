@@ -8,30 +8,29 @@ import { getElectronBridgeDebug, isDesktopDatabaseAvailable, type ElectronBridge
 import { createCatalogItem, listCatalogItems, updateCatalogItem } from "../lib/db/repositories/catalogRepo";
 import { getImportHistoryEntry, listImportBatches } from "../lib/db/repositories/importRepo";
 import { listPackages, updatePackage } from "../lib/db/repositories/packagesRepo";
-import { getLocalStatus, getSetting, setSetting, type LocalStatus } from "../lib/db/repositories/settingsRepo";
+import { getLocalStatus, getSetting, runDatabaseHealthCheck, setSetting, type DatabaseHealthCheck, type LocalStatus } from "../lib/db/repositories/settingsRepo";
 import { importDroptopInventory, previewDroptopInventory } from "../lib/import/droptopInventoryImporter";
 import { importDroptopOrders, previewDroptopOrders } from "../lib/import/droptopOrdersImporter";
 import type { ImportBatch, ImportHistoryEntry, InventoryImportResult, InventoryPreview, OrdersImportResult, OrdersPreview } from "../lib/import/importTypes";
 import type { ServiceCatalogItem } from "../types/catalog";
 import type { ServicePackage } from "../types/servicePackage";
+import { defaultFeatureFlags } from "../lib/config/featureFlags";
 
-const tabs = ["Operations", "Import Data", "Company", "Staff", "Services", "Packages", "Coupons", "API/System"];
+const tabs = ["Business Profile", "Tax", "Services", "Packages", "Import Data", "Integrations", "Database", "Theme/Branding"];
 const integrations = [
-  ["MOTOR", "VIN decoding and vehicle data placeholder"],
-  ["AWS or Local Storage", "Sticker, PDF, and upload placeholder"],
-  ["Stripe", "Payments placeholder"],
-  ["QuickBooks", "Finalized order export placeholder"],
-  ["Mailgun", "Email placeholder"],
-  ["Twilio", "Text placeholder"],
-  ["CARFAX", "License plate search and vehicle history placeholder"],
-  ["ShowMeTheParts", "Part catalog placeholder"],
-  ["Service Champ", "Oil filter vendor placeholder"]
-];
+  ["VIN Decoder", "NHTSA vPIC prepared provider. Disabled until configured.", defaultFeatureFlags.enableVinDecodeApi],
+  ["Loyalty App Sync", "Firebase sync for service history, rewards, coupons, and check-ins.", defaultFeatureFlags.enableFirebaseLoyaltySync],
+  ["Payments", "Stripe Terminal provider stub. Manual payments remain active.", defaultFeatureFlags.enableStripeTerminal],
+  ["Accounting", "QuickBooks Online daily sales/tax/payment export stub.", defaultFeatureFlags.enableQuickBooksExport],
+  ["Messaging", "Twilio SMS and future email receipt notifications.", defaultFeatureFlags.enableSmsNotifications || defaultFeatureFlags.enableEmailReceipts],
+  ["Plate Lookup", "External plate lookup is Coming Soon.", defaultFeatureFlags.enablePlateLookupApi]
+] as const;
 
 export function SettingsPage() {
   const [status, setStatus] = useState<LocalStatus | null>(null);
-  const [activeTab, setActiveTab] = useState("Operations");
+  const [activeTab, setActiveTab] = useState("Business Profile");
   const [taxRate, setTaxRate] = useState("0");
+  const [shop, setShop] = useState({ name: "Flynn's Quick Lube", address: "1023 Harrison Avenue, Harrison, Ohio 45030", phone: "" });
   const [packages, setPackages] = useState<ServicePackage[]>([]);
   const [catalogItems, setCatalogItems] = useState<ServiceCatalogItem[]>([]);
   const [newCatalogItem, setNewCatalogItem] = useState({ name: "", category: "Filters", base_price: "0", is_fee: false, is_discount: false });
@@ -45,12 +44,21 @@ export function SettingsPage() {
   const [importHistory, setImportHistory] = useState<ImportBatch[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<ImportHistoryEntry | null>(null);
   const [bridgeDebug, setBridgeDebug] = useState<ElectronBridgeDebug>(() => getElectronBridgeDebug());
+  const [health, setHealth] = useState<DatabaseHealthCheck | null>(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
   const { notify } = useToast();
 
   useEffect(() => {
     setBridgeDebug(getElectronBridgeDebug());
     getLocalStatus().then(setStatus).catch(() => setStatus(null));
     getSetting("tax_rate").then((setting) => setTaxRate(setting?.value ?? "0")).catch(() => setTaxRate("0"));
+    Promise.all([getSetting("shop_name"), getSetting("shop_address"), getSetting("shop_phone")]).then(([name, address, phone]) => {
+      setShop({
+        name: name?.value ?? "Flynn's Quick Lube",
+        address: address?.value ?? "1023 Harrison Avenue, Harrison, Ohio 45030",
+        phone: phone?.value ?? ""
+      });
+    }).catch(() => undefined);
     listPackages().then(setPackages).catch(() => setPackages([]));
     listCatalogItems().then(setCatalogItems).catch(() => setCatalogItems([]));
     listImportBatches().then(setImportHistory).catch(() => setImportHistory([]));
@@ -61,6 +69,10 @@ export function SettingsPage() {
   const saveTaxRate = async () => {
     await setSetting("tax_rate", taxRate);
     notify({ tone: "success", title: "Tax rate saved", message: `${taxRate}% will be used for new tickets.` });
+  };
+  const saveShop = async () => {
+    await Promise.all([setSetting("shop_name", shop.name), setSetting("shop_address", shop.address), setSetting("shop_phone", shop.phone)]);
+    notify({ tone: "success", title: "Operation saved", message: shop.name });
   };
 
   const savePackage = async (servicePackage: ServicePackage) => {
@@ -92,6 +104,23 @@ export function SettingsPage() {
     setCatalogItems(await listCatalogItems());
     setNewCatalogItem({ name: "", category: "Filters", base_price: "0", is_fee: false, is_discount: false });
     notify({ tone: "success", title: "Catalog item added", message: "Available for new tickets." });
+  };
+
+  const checkDatabase = async () => {
+    setCheckingHealth(true);
+    try {
+      const result = await runDatabaseHealthCheck();
+      setHealth(result);
+      notify({
+        tone: result.errors.length ? "error" : result.warnings.length ? "info" : "success",
+        title: result.errors.length ? "Database check found errors" : result.warnings.length ? "Database check found warnings" : "Database check passed",
+        message: `${result.passed.length} checks passed, ${result.warnings.length} warnings, ${result.errors.length} errors.`
+      });
+    } catch (error) {
+      notify({ tone: "error", title: "Database check failed", message: error instanceof Error ? error.message : "Unable to run health check." });
+    } finally {
+      setCheckingHealth(false);
+    }
   };
 
   const previewOrders = async () => {
@@ -177,7 +206,7 @@ export function SettingsPage() {
           <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-3 text-sm font-semibold ${activeTab === tab ? "border-b-2 border-[var(--brand-primary)] text-[var(--brand-primary-dark)]" : "text-slate-500 hover:text-slate-900"}`}>{tab}</button>
         ))}
       </div>
-      {activeTab === "Operations" ? (
+      {activeTab === "Business Profile" || activeTab === "Tax" || activeTab === "Database" ? (
         <Card className="overflow-hidden">
           <div className="grid grid-cols-[1fr_280px_120px_260px] items-center gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <span>Operation</span>
@@ -187,15 +216,24 @@ export function SettingsPage() {
           </div>
           <div className="grid grid-cols-[1fr_280px_120px_260px] items-center gap-4 px-5 py-4 text-sm">
             <div>
-              <div className="font-bold text-slate-950">Flynn's Quick Lube</div>
+              <div className="font-bold text-slate-950">{shop.name}</div>
               <div className="text-slate-500">Local database: {status?.databaseReady ? "Ready" : "Loading"}</div>
             </div>
-            <div className="text-slate-600">1023 Harrison Avenue, Harrison, Ohio 45030</div>
+            <div className="text-slate-600">{shop.address}</div>
             <div><Badge tone="green">Active</Badge></div>
             <div className="flex gap-2">
-              <Button variant="secondary">Till Manager</Button>
-              <Button variant="secondary">Settings</Button>
+              <Button variant="secondary" disabled>Till Manager Coming Soon</Button>
+              <Button variant="secondary" disabled>Advanced Settings Coming Soon</Button>
             </div>
+          </div>
+          <div className="border-t border-slate-200 p-5">
+            <h3 className="font-bold text-slate-950">Operation Info</h3>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <Input label="Shop name" value={shop.name} onChange={(event) => setShop({ ...shop, name: event.target.value })} />
+              <Input label="Address" value={shop.address} onChange={(event) => setShop({ ...shop, address: event.target.value })} />
+              <Input label="Phone" value={shop.phone} onChange={(event) => setShop({ ...shop, phone: event.target.value })} />
+            </div>
+            <Button className="mt-3" onClick={saveShop}>Save Operation</Button>
           </div>
           <div className="border-t border-slate-200 p-5">
             <h3 className="font-bold text-slate-950">Local Pricing</h3>
@@ -204,18 +242,34 @@ export function SettingsPage() {
               <Button onClick={saveTaxRate}>Save</Button>
             </div>
             <div className="mt-4 text-sm text-slate-500">Database: {status?.databasePath ?? "Electron userData path"} · Pending sync: {status?.syncQueueCount ?? 0}</div>
+            <div className="mt-3 flex flex-wrap gap-2"><Button variant="secondary" disabled={checkingHealth} onClick={checkDatabase}>{checkingHealth ? "Checking..." : "Run Database Check"}</Button><Button variant="secondary" disabled>Backup Database Coming Soon</Button><Button variant="danger" disabled>Reset Database Coming Soon</Button></div>
+            {health ? (
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                <div className="flex flex-wrap gap-3">
+                  <Badge tone={health.errors.length ? "red" : health.warnings.length ? "yellow" : "green"}>{health.errors.length ? "Errors" : health.warnings.length ? "Warnings" : "Passed"}</Badge>
+                  <span>Imported tickets: <strong>{health.counts.importedTickets}</strong></span>
+                  <span>Imported customers: <strong>{health.counts.importedCustomers}</strong></span>
+                  <span>Imported vehicles: <strong>{health.counts.importedVehicles}</strong></span>
+                  <span>Imported inventory: <strong>{health.counts.importedInventory}</strong></span>
+                </div>
+                {health.errors.length ? <div className="mt-3 space-y-1 text-red-700">{health.errors.map((item) => <div key={item}>{item}</div>)}</div> : null}
+                {health.warnings.length ? <div className="mt-3 space-y-1 text-amber-700">{health.warnings.map((item) => <div key={item}>{item}</div>)}</div> : null}
+                {!health.errors.length && !health.warnings.length ? <div className="mt-3 text-green-700">Core tables, columns, imported IDs, payments, and service-history links look healthy.</div> : null}
+              </div>
+            ) : null}
           </div>
         </Card>
       ) : null}
-      {activeTab === "API/System" ? (
+      {activeTab === "Integrations" ? (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {integrations.map(([name, description]) => (
+          {integrations.map(([name, description, enabled]) => (
             <Card key={name} className="p-5">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-bold text-slate-950">{name}</h3>
-                <Badge>Placeholder</Badge>
+                <Badge tone={enabled ? "green" : "slate"}>{enabled ? "Enabled" : "Not Configured"}</Badge>
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-500">{description}</p>
+              <Button className="mt-4" variant="secondary" disabled>Setup Coming Soon</Button>
             </Card>
           ))}
         </div>
@@ -413,8 +467,8 @@ export function SettingsPage() {
           </Card>
         </div>
       ) : null}
-      {activeTab !== "Operations" && activeTab !== "API/System" ? (
-        activeTab !== "Packages" && activeTab !== "Services" && activeTab !== "Import Data" ? <Card className="p-8 text-sm text-slate-500">{activeTab} settings will be configured in a later workflow step.</Card> : null
+      {activeTab !== "Business Profile" && activeTab !== "Tax" && activeTab !== "Database" && activeTab !== "Integrations" ? (
+        activeTab !== "Packages" && activeTab !== "Services" && activeTab !== "Import Data" ? <Card className="p-8 text-sm text-slate-500">{activeTab} settings are Coming Soon.</Card> : null
       ) : null}
     </section>
   );

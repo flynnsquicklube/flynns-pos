@@ -2,6 +2,8 @@ import { execute, query } from "../sqlite";
 import { createId } from "../../utils/ids";
 import { nowIso, todayIsoDate } from "../../utils/dates";
 import { calculateTicketTotals } from "../../pricing/pricingEngine";
+import { assertTicketTransition } from "../../domain/tickets/ticketWorkflow";
+import { validateFinalMileage, validateTicketLines } from "../../domain/tickets/ticketValidation";
 import { createPayment } from "./paymentsRepo";
 import { createServiceHistory } from "./serviceHistoryRepo";
 import { updateVehicleAfterService } from "./vehiclesRepo";
@@ -11,6 +13,7 @@ import type { Ticket, TicketItem, TicketLineInput, TicketStatus, TicketWithDetai
 
 export interface DashboardMetrics {
   todaySales: number;
+  netSales: number;
   carCount: number;
   averageTicket: number;
   openTickets: number;
@@ -19,6 +22,8 @@ export interface DashboardMetrics {
   unpaidCompleted: number;
   waitingPayment: number;
   inService: number;
+  completedToday: number;
+  partialPaid: number;
 }
 
 export interface CreateTicketInput {
@@ -77,7 +82,8 @@ export async function getTicket(id: string): Promise<Ticket | null> {
 export async function createTicketWithItems(input: CreateTicketInput): Promise<TicketWithDetails> {
   if (!input.customer_id) throw new Error("A customer is required.");
   if (!input.vehicle_id) throw new Error("A vehicle is required.");
-  if (input.items.length === 0) throw new Error("At least one service or line item is required.");
+  const lineError = validateTicketLines(input.items);
+  if (lineError) throw new Error(lineError);
 
   const id = createId("tkt");
   const timestamp = nowIso();
@@ -311,11 +317,28 @@ export async function getTicketById(id: string): Promise<TicketWithDetails | nul
 }
 
 export async function updateTicketStatus(id: string, status: TicketStatus): Promise<void> {
+  const ticket = await getTicket(id);
+  if (!ticket) throw new Error("Ticket not found.");
+  assertTicketTransition(ticket.status, status);
   await execute("UPDATE tickets SET status = ?, updated_at = ?, sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL", [status, nowIso(), id]);
 }
 
 export async function updateTicketBay(id: string, bay: string | null): Promise<void> {
   await execute("UPDATE tickets SET bay = ?, updated_at = ?, sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL", [bay, nowIso(), id]);
+}
+
+export async function moveTicketBay(id: string, bay: string): Promise<void> {
+  const ticket = await getTicket(id);
+  if (!ticket) throw new Error("Ticket not found.");
+  if (ticket.status !== "in_service") throw new Error("Only in-service tickets can move bays.");
+  await updateTicketBay(id, bay);
+}
+
+export async function markWaitingPayment(id: string): Promise<void> {
+  const ticket = await getTicket(id);
+  if (!ticket) throw new Error("Ticket not found.");
+  assertTicketTransition(ticket.status, "waiting_payment");
+  await updateTicketStatus(id, "waiting_payment");
 }
 
 export async function updateTicketNotes(
@@ -336,28 +359,91 @@ export async function updateTicketNotes(
   );
 }
 
+async function recalculateTicketTotals(ticketId: string, taxRate = 0): Promise<void> {
+  const items = await loadItems([ticketId]);
+  const totals = calculateTicketTotals(
+    items.map((item) => ({
+      service_id: item.service_id,
+      item_type: item.item_type as TicketLineInput["item_type"],
+      package_id: item.package_id,
+      inventory_item_id: item.inventory_item_id,
+      name: item.name,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      taxable: item.taxable
+    })),
+    taxRate
+  );
+  await execute(
+    "UPDATE tickets SET subtotal = ?, discount_total = ?, tax_total = ?, fee_total = ?, total = ?, updated_at = ?, sync_status = 'pending' WHERE id = ?",
+    [totals.subtotal, totals.discount_total, totals.tax_total, totals.fee_total, totals.total, nowIso(), ticketId]
+  );
+}
+
+export async function addTicketItem(ticketId: string, item: TicketLineInput, taxRate = 0): Promise<void> {
+  const ticket = await getTicket(ticketId);
+  if (!ticket) throw new Error("Ticket not found.");
+  if (ticket.status === "completed") throw new Error("Completed tickets are locked.");
+  const timestamp = nowIso();
+  await execute(
+    `INSERT INTO ticket_items (
+      id, ticket_id, service_id, item_type, package_id, inventory_item_id, name,
+      quantity, unit_price, line_total, taxable, created_at, updated_at, deleted_at, sync_status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'pending')`,
+    [
+      createId("item"),
+      ticketId,
+      item.service_id,
+      item.item_type ?? "custom",
+      item.package_id ?? null,
+      item.inventory_item_id ?? null,
+      item.name,
+      item.quantity,
+      item.unit_price,
+      Math.round(item.quantity * item.unit_price * 100) / 100,
+      item.taxable,
+      timestamp,
+      timestamp
+    ]
+  );
+  await recalculateTicketTotals(ticketId, taxRate);
+}
+
+export async function removeTicketItem(ticketId: string, itemId: string, taxRate = 0): Promise<void> {
+  const ticket = await getTicket(ticketId);
+  if (!ticket) throw new Error("Ticket not found.");
+  if (ticket.status === "completed") throw new Error("Completed tickets are locked.");
+  await execute("UPDATE ticket_items SET deleted_at = ?, updated_at = ?, sync_status = 'pending' WHERE id = ? AND ticket_id = ?", [nowIso(), nowIso(), itemId, ticketId]);
+  await recalculateTicketTotals(ticketId, taxRate);
+}
+
 export async function completeTicket(id: string, input: CompleteTicketInput): Promise<void> {
   if (!input.paymentMethod) throw new Error("Payment method is required.");
   if (input.paymentAmount !== undefined && (!Number.isFinite(input.paymentAmount) || input.paymentAmount <= 0)) throw new Error("Payment amount is required.");
-  if (!Number.isFinite(input.finalMileage) || input.finalMileage <= 0) throw new Error("Final mileage is required.");
   const ticket = await getTicketById(id);
   if (!ticket) throw new Error("Ticket not found.");
-  if (ticket.status !== "waiting_payment") throw new Error("Ticket must be waiting payment before completion.");
+  assertTicketTransition(ticket.status, "completed");
+  if (ticket.completed_at) throw new Error("Ticket is already completed.");
   if (!ticket.vehicle_id) throw new Error("Ticket has no vehicle.");
   if (!ticket.customer_id) throw new Error("Ticket has no customer.");
+  const mileageError = validateFinalMileage(ticket.vehicle_mileage, input.finalMileage);
+  if (mileageError) throw new Error(mileageError);
   const timestamp = nowIso();
+  const paymentAmount = input.paymentAmount ?? ticket.total;
+  const paymentStatus = paymentAmount >= ticket.total ? "paid" : "partial";
 
   await createPayment({
     ticket_id: id,
     method: input.paymentMethod,
-    amount: input.paymentAmount ?? ticket.total,
+    amount: paymentAmount,
+    status: paymentStatus === "paid" ? "paid" : "partial",
     reference: input.reference ?? null,
     paid_at: timestamp
   });
   await updateVehicleAfterService(ticket.vehicle_id, input.finalMileage, input.oilType);
   await execute(
-    "UPDATE tickets SET status = 'completed', payment_status = 'paid', completed_at = ?, bay = NULL, updated_at = ?, sync_status = 'pending' WHERE id = ?",
-    [timestamp, timestamp, id]
+    "UPDATE tickets SET status = 'completed', payment_status = ?, completed_at = ?, bay = NULL, updated_at = ?, sync_status = 'pending' WHERE id = ?",
+    [paymentStatus, timestamp, timestamp, id]
   );
   await createServiceHistory({
     ticket_id: id,
@@ -374,7 +460,7 @@ export async function completeTicket(id: string, input: CompleteTicketInput): Pr
 export async function startService(ticketId: string, bay: string): Promise<void> {
   const ticket = await getTicket(ticketId);
   if (!ticket) throw new Error("Ticket not found.");
-  if (ticket.status !== "checked_in") throw new Error("Only checked-in tickets can start service.");
+  assertTicketTransition(ticket.status, "in_service");
   await execute(
     "UPDATE tickets SET status = 'in_service', bay = ?, updated_at = ?, sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL",
     [bay, nowIso(), ticketId]
@@ -384,30 +470,48 @@ export async function startService(ticketId: string, bay: string): Promise<void>
 export async function cancelTicket(id: string): Promise<void> {
   const ticket = await getTicket(id);
   if (!ticket) throw new Error("Ticket not found.");
-  if (ticket.status === "completed") throw new Error("Completed tickets cannot be canceled.");
+  assertTicketTransition(ticket.status, "canceled");
   await updateTicketStatus(id, "canceled");
 }
 
 export async function reopenTicket(id: string): Promise<void> {
   const ticket = await getTicket(id);
   if (!ticket) throw new Error("Ticket not found.");
-  if (ticket.status !== "canceled") throw new Error("Only canceled tickets can be reopened.");
+  assertTicketTransition(ticket.status, "checked_in");
   await updateTicketStatus(id, "checked_in");
 }
 
-export async function getDashboardMetrics(): Promise<DashboardMetrics> {
+export async function getDashboardMetrics(range: { dateFrom?: string; dateTo?: string } = {}): Promise<DashboardMetrics> {
   const today = `${todayIsoDate()}%`;
+  const params: unknown[] = [];
+  const dateClauses = ["deleted_at IS NULL", "status = 'completed'"];
+  if (range.dateFrom) {
+    dateClauses.push("completed_at >= ?");
+    params.push(range.dateFrom);
+  } else {
+    dateClauses.push("completed_at LIKE ?");
+    params.push(today);
+  }
+  if (range.dateTo) {
+    dateClauses.push("completed_at <= ?");
+    params.push(range.dateTo);
+  }
   const [sales] = await query<{ total: number | null; count: number }>(
-    "SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count FROM tickets WHERE completed_at LIKE ? AND deleted_at IS NULL AND status = 'completed'",
-    [today]
+    `SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as count FROM tickets WHERE ${dateClauses.join(" AND ")}`,
+    params
+  );
+  const [net] = await query<{ total: number | null }>(
+    `SELECT COALESCE(SUM(total - tax_total), 0) as total FROM tickets WHERE ${dateClauses.join(" AND ")}`,
+    params
   );
   const [open] = await query<{ count: number }>(
     "SELECT COUNT(*) as count FROM tickets WHERE status IN ('checked_in', 'in_service', 'waiting_payment') AND deleted_at IS NULL"
   );
   const [unpaidCompleted] = await query<{ count: number }>(
-    "SELECT COUNT(*) as count FROM tickets WHERE status = 'completed' AND payment_status != 'paid' AND completed_at LIKE ? AND deleted_at IS NULL",
-    [today]
+    `SELECT COUNT(*) as count FROM tickets WHERE status = 'completed' AND payment_status != 'paid' AND deleted_at IS NULL ${range.dateFrom ? "AND completed_at >= ?" : "AND completed_at LIKE ?"} ${range.dateTo ? "AND completed_at <= ?" : ""}`,
+    range.dateFrom ? (range.dateTo ? [range.dateFrom, range.dateTo] : [range.dateFrom]) : [today]
   );
+  const [partialPaid] = await query<{ count: number }>("SELECT COUNT(*) as count FROM tickets WHERE payment_status = 'partial' AND deleted_at IS NULL");
   const [waitingPayment] = await query<{ count: number }>(
     "SELECT COUNT(*) as count FROM tickets WHERE status = 'waiting_payment' AND deleted_at IS NULL"
   );
@@ -420,6 +524,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
   const carCount = sales?.count ?? 0;
   return {
     todaySales,
+    netSales: net?.total ?? 0,
     carCount,
     averageTicket: carCount > 0 ? todaySales / carCount : 0,
     openTickets: open?.count ?? 0,
@@ -427,7 +532,9 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     vehicleCountToday: carCount,
     unpaidCompleted: unpaidCompleted?.count ?? 0,
     waitingPayment: waitingPayment?.count ?? 0,
-    inService: inService?.count ?? 0
+    inService: inService?.count ?? 0,
+    completedToday: carCount,
+    partialPaid: partialPaid?.count ?? 0
   };
 }
 

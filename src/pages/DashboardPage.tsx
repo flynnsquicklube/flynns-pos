@@ -5,7 +5,7 @@ import { Badge } from "../components/ui/Badge";
 import { getDashboardMetrics, type DashboardMetrics } from "../lib/db/repositories/ticketsRepo";
 import { formatMoney } from "../lib/utils/money";
 
-const initialMetrics: DashboardMetrics = { todaySales: 0, carCount: 0, averageTicket: 0, openTickets: 0, lowInventory: 0, vehicleCountToday: 0, unpaidCompleted: 0, waitingPayment: 0, inService: 0 };
+const initialMetrics: DashboardMetrics = { todaySales: 0, netSales: 0, carCount: 0, averageTicket: 0, openTickets: 0, lowInventory: 0, vehicleCountToday: 0, unpaidCompleted: 0, waitingPayment: 0, inService: 0, completedToday: 0, partialPaid: 0 };
 
 export function DashboardPage() {
   const [metrics, setMetrics] = useState<DashboardMetrics>(initialMetrics);

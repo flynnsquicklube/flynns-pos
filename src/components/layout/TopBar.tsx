@@ -1,33 +1,36 @@
-import { CircleHelp, Settings, WifiOff } from "lucide-react";
+import { Bell, ChevronDown, Sparkles } from "lucide-react";
 import { Badge } from "../ui/Badge";
+import { Button } from "../ui/Button";
+import { GlobalSearchBox } from "../search/GlobalSearchBox";
+import type { PageKey } from "./Sidebar";
 
-export function TopBar() {
+interface TopBarProps {
+  onNavigate: (page: PageKey, entityId?: string) => void;
+}
+
+export function TopBar({ onNavigate }: TopBarProps) {
   return (
-    <header className="flex h-[58px] items-center justify-between border-b border-[var(--brand-border)] bg-white px-5">
-      <div className="flex items-center gap-4">
-        <div>
-          <div className="text-sm font-semibold text-slate-900">Brandon Flynn</div>
-          <div className="text-xs text-slate-500">Flynn's Quick Lube POS</div>
+    <header className="relative z-20 flex min-h-[72px] items-center gap-4 border-b border-[var(--pos-border)] bg-[rgba(5,9,20,0.86)] px-5 backdrop-blur-xl">
+      <GlobalSearchBox
+        onCustomer={(id) => onNavigate("customers", id)}
+        onVehicle={(id) => onNavigate("vehicles", id)}
+        onTicket={(id) => onNavigate("ticket-detail", id)}
+        onUseVin={() => onNavigate("order-wizard")}
+      />
+      <Button icon={<Sparkles size={18} />} onClick={() => onNavigate("order-wizard")}>Start Ticket</Button>
+      <button type="button" disabled className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] text-[var(--pos-muted)]" title="Notifications Coming Soon">
+        <Bell size={20} />
+      </button>
+      <div className="hidden items-center gap-3 rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] px-3 py-2 md:flex">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--pos-blue)] text-sm font-black text-white">BF</div>
+        <div className="leading-tight">
+          <div className="text-sm font-bold text-[var(--pos-text)]">Brandon Flynn</div>
+          <div className="text-xs text-[var(--pos-muted)]">Flynn's Quick Lube</div>
         </div>
+        <ChevronDown size={16} className="text-[var(--pos-muted)]" />
       </div>
-      <div className="flex items-center gap-4">
-        <div className="text-right">
-          <div className="text-sm font-semibold text-slate-900">Active Operation: <span className="text-[var(--brand-primary)]">Flynn's Quick Lube</span></div>
-          <div className="text-xs text-slate-500">1023 Harrison Avenue</div>
-        </div>
-        <div className="flex items-center gap-1 text-slate-500">
-          <Badge tone="blue" className="mr-2 hidden md:inline-flex">Local / Offline</Badge>
-          <button type="button" className="rounded-lg p-2 hover:bg-[var(--brand-primary-light)] hover:text-[var(--brand-primary)]" title="Offline local mode">
-            <WifiOff size={18} />
-          </button>
-          <button type="button" className="rounded-lg p-2 hover:bg-[var(--brand-primary-light)] hover:text-[var(--brand-primary)]" title="Help">
-            <CircleHelp size={18} />
-          </button>
-          <button type="button" className="rounded-lg p-2 hover:bg-[var(--brand-primary-light)] hover:text-[var(--brand-primary)]" title="Settings">
-            <Settings size={18} />
-          </button>
-        </div>
-      </div>
+      <Badge tone="green" className="hidden xl:inline-flex">Local Online</Badge>
     </header>
   );
 }
+

@@ -3,11 +3,11 @@ import type { HTMLAttributes } from "react";
 type BadgeTone = "blue" | "green" | "yellow" | "red" | "slate";
 
 const tones: Record<BadgeTone, string> = {
-  blue: "border-[var(--brand-primary)] bg-[var(--brand-primary-light)] text-[var(--brand-primary-dark)]",
-  green: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  yellow: "border-amber-200 bg-amber-50 text-amber-700",
-  red: "border-red-200 bg-red-50 text-red-700",
-  slate: "border-slate-200 bg-slate-100 text-slate-700"
+  blue: "border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] text-sky-100",
+  green: "border-emerald-500/40 bg-emerald-500/15 text-emerald-200",
+  yellow: "border-amber-500/40 bg-amber-500/15 text-amber-200",
+  red: "border-red-500/40 bg-red-500/15 text-red-200",
+  slate: "border-[var(--pos-border)] bg-[var(--pos-panel-2)] text-[var(--pos-muted)]"
 };
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {

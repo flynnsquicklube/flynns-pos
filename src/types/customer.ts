@@ -7,6 +7,9 @@ export interface Customer {
   notes: string | null;
   firebase_uid: string | null;
   referral_code: string | null;
+  external_source?: string | null;
+  external_id?: string | null;
+  is_imported?: number;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
