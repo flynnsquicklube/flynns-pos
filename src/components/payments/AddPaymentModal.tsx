@@ -90,61 +90,61 @@ export function AddPaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-auto rounded-[28px] border border-slate-200 bg-slate-100 shadow-2xl">
-        <div className="border-b border-slate-200 bg-white px-7 py-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-auto rounded-[28px] border border-[var(--pos-border)] bg-[var(--pos-bg)] shadow-2xl">
+        <div className="border-b border-[var(--pos-border)] bg-[var(--pos-panel)] px-7 py-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-black text-slate-950">Add Payment</h2>
-              <p className="mt-1 text-sm text-slate-500">{invoiceNumber ? `Invoice ${invoiceNumber}` : "Manual payment recording"}</p>
+              <h2 className="text-2xl font-black text-[var(--pos-text)]">Add Payment</h2>
+              <p className="mt-1 text-sm text-[var(--pos-muted)]">{invoiceNumber ? `Invoice ${invoiceNumber}` : "Manual payment recording"}</p>
             </div>
             <Button variant="secondary" onClick={onClose}>Cancel</Button>
           </div>
         </div>
 
         <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[1.15fr_.85fr]">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="text-xs font-black uppercase tracking-wide text-slate-500">Payment Amount</div>
+          <section className="rounded-[var(--pos-radius-xl)] border border-[var(--pos-border)] bg-[var(--pos-panel)] p-6 shadow-[var(--pos-shadow-card)]">
+            <div className="text-xs font-black uppercase tracking-wide text-[var(--pos-muted)]">Payment Amount</div>
             <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
               {editingAmount ? (
                 <Input className="max-w-xs" label="Amount" inputSize="touch" type="number" min="0.01" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} />
               ) : (
-                <div className="text-5xl font-black text-slate-950">{formatMoney(amountNumber)}</div>
+                <div className="text-5xl font-black text-[var(--pos-text)]">{formatMoney(amountNumber)}</div>
               )}
               <Button variant="secondary" onClick={() => setEditingAmount((value) => !value)}>{editingAmount ? "Done" : "Edit"}</Button>
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm text-slate-500">Order Total</div><div className="mt-1 text-2xl font-black text-slate-950">{formatMoney(total)}</div></div>
-              <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm text-slate-500">Already Paid</div><div className="mt-1 text-2xl font-black text-slate-950">{formatMoney(paid)}</div></div>
-              <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm text-slate-500">Balance After Payment</div><div className="mt-1 text-2xl font-black text-[var(--pos-blue)]">{formatMoney(remaining)}</div></div>
-              <div className="rounded-2xl bg-slate-50 p-4"><div className="text-sm text-slate-500">Payment From</div><div className="mt-1 text-xl font-black text-slate-950">{customerName}</div></div>
+              <div className="rounded-[var(--pos-radius-md)] bg-[var(--pos-panel-2)] p-4"><div className="text-sm text-[var(--pos-muted)]">Order Total</div><div className="mt-1 text-2xl font-black text-[var(--pos-text)]">{formatMoney(total)}</div></div>
+              <div className="rounded-[var(--pos-radius-md)] bg-[var(--pos-panel-2)] p-4"><div className="text-sm text-[var(--pos-muted)]">Already Paid</div><div className="mt-1 text-2xl font-black text-[var(--pos-text)]">{formatMoney(paid)}</div></div>
+              <div className="rounded-[var(--pos-radius-md)] bg-[var(--pos-panel-2)] p-4"><div className="text-sm text-[var(--pos-muted)]">Balance After Payment</div><div className="mt-1 text-2xl font-black text-[var(--pos-blue)]">{formatMoney(remaining)}</div></div>
+              <div className="rounded-[var(--pos-radius-md)] bg-[var(--pos-panel-2)] p-4"><div className="text-sm text-[var(--pos-muted)]">Payment From</div><div className="mt-1 text-xl font-black text-[var(--pos-text)]">{customerName}</div></div>
             </div>
 
             {changeDue > 0 ? (
-              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-lg font-black text-emerald-700">Change Due: {formatMoney(changeDue)}</div>
+              <div className="mt-4 rounded-[var(--pos-radius-md)] border border-emerald-200 bg-emerald-50 p-4 text-lg font-black text-emerald-700">Change Due: {formatMoney(changeDue)}</div>
             ) : null}
           </section>
 
           <section className="space-y-5">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="font-black text-slate-950">Finalize Order?</div>
+            <div className="rounded-[var(--pos-radius-xl)] border border-[var(--pos-border)] bg-[var(--pos-panel)] p-5 shadow-[var(--pos-shadow-card)]">
+              <div className="font-black text-[var(--pos-text)]">Finalize Order?</div>
               <div className="mt-3 grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setFinalize(false)} className={`min-h-12 rounded-xl border text-sm font-black ${!finalize ? "border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] text-[var(--pos-blue)]" : "border-slate-200 bg-white text-slate-600"}`}>No</button>
-                <button type="button" onClick={() => setFinalize(true)} className={`min-h-12 rounded-xl border text-sm font-black ${finalize ? "border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] text-[var(--pos-blue)]" : "border-slate-200 bg-white text-slate-600"}`}>Yes</button>
+                <button type="button" onClick={() => setFinalize(false)} className={`min-h-12 rounded-[var(--pos-radius-md)] border text-sm font-black transition ${!finalize ? "border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] text-[var(--pos-blue)]" : "border-[var(--pos-border)] bg-[var(--pos-panel-2)] text-[var(--pos-muted)]"}`}>No</button>
+                <button type="button" onClick={() => setFinalize(true)} className={`min-h-12 rounded-[var(--pos-radius-md)] border text-sm font-black transition ${finalize ? "border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] text-[var(--pos-blue)]" : "border-[var(--pos-border)] bg-[var(--pos-panel-2)] text-[var(--pos-muted)]"}`}>Yes</button>
               </div>
-              <p className="mt-3 text-xs text-slate-500">Default is No. Choose Yes only when the invoice is paid and ready to complete.</p>
+              <p className="mt-3 text-xs text-[var(--pos-muted)]">Default is No. Choose Yes only when the invoice is paid and ready to complete.</p>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="font-black text-slate-950">Payment Method</div>
+            <div className="rounded-[var(--pos-radius-xl)] border border-[var(--pos-border)] bg-[var(--pos-panel)] p-5 shadow-[var(--pos-shadow-card)]">
+              <div className="font-black text-[var(--pos-text)]">Payment Method</div>
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {paymentTypes.map((type) => (
                   <button
                     key={type}
                     type="button"
                     onClick={() => setPaymentType(type)}
-                    className={`min-h-[58px] rounded-2xl border px-2 text-sm font-black transition ${paymentType === type ? "border-[var(--pos-blue)] bg-[var(--pos-blue)] text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-[var(--pos-blue)] hover:bg-[var(--pos-blue-soft)]"}`}
+                    className={`min-h-[58px] rounded-[var(--pos-radius-md)] border px-2 text-sm font-black transition ${paymentType === type ? "border-[var(--pos-blue)] bg-[var(--pos-blue)] text-white shadow-sm" : "border-[var(--pos-border)] bg-[var(--pos-panel-2)] text-[var(--pos-text)] hover:border-[var(--pos-blue)] hover:bg-[var(--pos-blue-soft)]"}`}
                   >
                     {type}
                   </button>
@@ -152,25 +152,25 @@ export function AddPaymentModal({
               </div>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="font-black text-slate-950">Reference & Memo</div>
-              <p className="mt-1 text-sm text-slate-500">Selected method: <strong className="text-slate-800">{paymentType}</strong></p>
+            <div className="rounded-[var(--pos-radius-xl)] border border-[var(--pos-border)] bg-[var(--pos-panel)] p-5 shadow-[var(--pos-shadow-card)]">
+              <div className="font-black text-[var(--pos-text)]">Reference & Memo</div>
+              <p className="mt-1 text-sm text-[var(--pos-muted)]">Selected method: <strong className="text-[var(--pos-text)]">{paymentType}</strong></p>
               <Input className="mt-3" label="Reference optional" inputSize="touch" value={reference} onChange={(event) => setReference(event.target.value)} />
               <Input className="mt-3" label="Memo optional" inputSize="touch" value={memo} onChange={(event) => setMemo(event.target.value)} />
             </div>
 
             {(customerEmail || customerPhone) ? (
-              <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm shadow-sm">
-                <div className="font-black text-slate-950">Customer Contact</div>
-                {customerEmail ? <div className="mt-3 rounded-2xl bg-slate-50 p-3 text-slate-500">Email on file: <strong className="text-slate-700">{customerEmail}</strong></div> : null}
-                {customerPhone ? <div className="mt-2 rounded-2xl bg-slate-50 p-3 text-slate-500">Phone on file: <strong className="text-slate-700">{customerPhone}</strong></div> : null}
+              <div className="rounded-[var(--pos-radius-xl)] border border-[var(--pos-border)] bg-[var(--pos-panel)] p-5 text-sm shadow-[var(--pos-shadow-card)]">
+                <div className="font-black text-[var(--pos-text)]">Customer Contact</div>
+                {customerEmail ? <div className="mt-3 rounded-[var(--pos-radius-md)] bg-[var(--pos-panel-2)] p-3 text-[var(--pos-muted)]">Email on file: <strong className="text-[var(--pos-text)]">{customerEmail}</strong></div> : null}
+                {customerPhone ? <div className="mt-2 rounded-[var(--pos-radius-md)] bg-[var(--pos-panel-2)] p-3 text-[var(--pos-muted)]">Phone on file: <strong className="text-[var(--pos-text)]">{customerPhone}</strong></div> : null}
               </div>
             ) : null}
           </section>
         </div>
 
-        {error ? <div className="mx-6 mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div> : null}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-7 py-5">
+        {error ? <div className="mx-6 mb-4 rounded-[var(--pos-radius-md)] border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div> : null}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--pos-border)] bg-[var(--pos-panel)] px-7 py-5">
           <Button className="min-w-40" variant="secondary" onClick={onClose}>Cancel</Button>
           <Button className="min-w-56" size="touch" disabled={loading || !canPay} onClick={save}>{loading ? "Saving..." : finalize ? "Complete Payment & Finalize" : "Complete Payment"}</Button>
         </div>

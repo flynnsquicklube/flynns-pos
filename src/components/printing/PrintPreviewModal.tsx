@@ -12,7 +12,7 @@ interface PrintPreviewModalProps {
 
 export function PrintPreviewModal({ title, printJob, children, onPrint, onMarkPrinted, onClose }: PrintPreviewModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-6 print:static print:block print:bg-white print:p-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-6 print:static print:block print:bg-white print:p-0">
       <div className="flex max-h-[94vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-[var(--pos-radius-xl)] border border-[var(--pos-border)] bg-[var(--pos-panel)] shadow-2xl print:max-h-none print:max-w-none print:border-0 print:bg-white print:shadow-none">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--pos-border)] px-5 py-4 print:hidden">
           <div>

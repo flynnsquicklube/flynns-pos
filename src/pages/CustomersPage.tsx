@@ -271,27 +271,27 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
       ) : null}
       {error ? <Card className="p-4 text-sm text-red-700">{error}</Card> : null}
       {hasSearchOrFilter ? <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 text-sm text-slate-500">
+        <div className="flex items-center justify-between border-b border-[var(--pos-border)] px-5 py-3 text-sm text-[var(--pos-muted)]">
           <span>{resultCount} matching customer{resultCount === 1 ? "" : "s"}</span>
           {loading ? <span>Searching...</span> : null}
         </div>
         {customers.length === 0 ? (
           <EmptyState title={loading ? "Loading customers" : "No customers found"} message={hasSearchOrFilter ? "Try another name, phone, email, VIN, or plate." : "Recent customer records will appear here."} />
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[var(--pos-border)]">
             {customers.map((customer) => (
-              <div key={customer.id} className="grid gap-3 px-5 py-4 text-sm hover:bg-slate-50 lg:grid-cols-[1fr_160px_220px_130px_150px_auto] lg:items-center">
+              <div key={customer.id} className="grid gap-3 px-5 py-4 text-sm hover:bg-[var(--pos-panel-2)] lg:grid-cols-[1fr_160px_220px_130px_150px_auto] lg:items-center">
                 <div>
-                  <div className="flex flex-wrap items-center gap-2 font-semibold text-slate-950">
+                  <div className="flex flex-wrap items-center gap-2 font-semibold text-[var(--pos-text)]">
                     {customer.first_name} {customer.last_name}
                     {customer.is_imported ? <Badge tone="blue">Imported</Badge> : null}
                   </div>
-                  <div className="text-slate-500">{customer.notes ?? "No customer notes"}</div>
+                  <div className="text-[var(--pos-muted)]">{customer.notes ?? "No customer notes"}</div>
                 </div>
-                <div className="text-slate-700">{customer.phone}</div>
-                <div className="text-slate-500">{customer.email ?? "-"}</div>
-                <div className="text-slate-500">{customer.vehicle_count} vehicle{customer.vehicle_count === 1 ? "" : "s"}</div>
-                <div className="text-slate-500">{customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : "No visits"}</div>
+                <div className="text-[var(--pos-text)]">{customer.phone}</div>
+                <div className="text-[var(--pos-muted)]">{customer.email ?? "-"}</div>
+                <div className="text-[var(--pos-muted)]">{customer.vehicle_count} vehicle{customer.vehicle_count === 1 ? "" : "s"}</div>
+                <div className="text-[var(--pos-muted)]">{customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : "No visits"}</div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => void openCustomer(customer)}>Open</Button>
                   <Button onClick={() => { setStartTicketContext({ customerId: customer.id, source: "customer_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
@@ -301,7 +301,7 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
           </div>
         )}
         {hasSearchOrFilter && customers.length < resultCount ? (
-          <div className="border-t border-slate-200 p-4 text-center">
+          <div className="border-t border-[var(--pos-border)] p-4 text-center">
             <Button variant="secondary" disabled={loading} onClick={() => loadCustomers(offset, true)}>Load More</Button>
           </div>
         ) : null}
@@ -309,7 +309,7 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
       {selected ? (
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-bold text-slate-950">Customer Detail: {selected.first_name} {selected.last_name}</h2>
+            <h2 className="text-xl font-bold text-[var(--pos-text)]">Customer Detail: {selected.first_name} {selected.last_name}</h2>
             <div className="flex gap-2">
               <Button onClick={() => { setStartTicketContext({ customerId: selected.id, source: "customer_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
             </div>
@@ -323,25 +323,25 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
           </div>
           <Button className="mt-3" onClick={saveSelectedCustomer}>Save Customer</Button>
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="font-bold text-slate-950">Customer App Link</div>
-              <div className="mt-3 space-y-2 text-sm text-slate-600">
+            <div className="rounded-lg border border-[var(--pos-border)] p-4">
+              <div className="font-bold text-[var(--pos-text)]">Customer App Link</div>
+              <div className="mt-3 space-y-2 text-sm text-[var(--pos-muted)]">
                 <div>Status: <strong>{selected.app_link_status ?? (selected.firebase_uid ? "linked" : "unlinked")}</strong></div>
                 <div>Firebase UID: <strong>{selected.firebase_uid ?? "Not linked"}</strong></div>
                 <div>App email: <strong>{selected.app_email ?? selected.email ?? "-"}</strong></div>
                 <div>App phone: <strong>{selected.app_phone ?? selected.phone ?? "-"}</strong></div>
               </div>
             </div>
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="font-bold text-slate-950">Coupons ({coupons.length})</div>
+            <div className="rounded-lg border border-[var(--pos-border)] p-4">
+              <div className="font-bold text-[var(--pos-text)]">Coupons ({coupons.length})</div>
               <div className="mt-3 space-y-2 text-sm">
                 {coupons.slice(0, 8).map((coupon) => (
-                  <div key={coupon.id} className="rounded-md border border-slate-100 p-2">
-                    <div className="font-semibold text-slate-950">{coupon.title} · {coupon.status}</div>
-                    <div className="text-slate-500">{coupon.discount_type === "fixed" ? formatMoney(coupon.discount_amount) : coupon.discount_type === "percent" ? `${coupon.discount_amount}%` : "Free oil change"} · {coupon.source ?? "manual"}</div>
+                  <div key={coupon.id} className="rounded-md border border-[var(--pos-border)] p-2">
+                    <div className="font-semibold text-[var(--pos-text)]">{coupon.title} · {coupon.status}</div>
+                    <div className="text-[var(--pos-muted)]">{coupon.discount_type === "fixed" ? formatMoney(coupon.discount_amount) : coupon.discount_type === "percent" ? `${coupon.discount_amount}%` : "Free oil change"} · {coupon.source ?? "manual"}</div>
                   </div>
                 ))}
-                {!coupons.length ? <div className="text-slate-500">No coupons yet.</div> : null}
+                {!coupons.length ? <div className="text-[var(--pos-muted)]">No coupons yet.</div> : null}
               </div>
               <div className="mt-4 grid gap-2">
                 <Input label="Manual coupon title" value={manualCoupon.title} onChange={(event) => setManualCoupon({ ...manualCoupon, title: event.target.value })} />
@@ -349,22 +349,22 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
                 <Button onClick={addManualCoupon}>Create Manual Coupon</Button>
               </div>
             </div>
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="font-bold text-slate-950">Rewards</div>
+            <div className="rounded-lg border border-[var(--pos-border)] p-4">
+              <div className="font-bold text-[var(--pos-text)]">Rewards</div>
               <div className="mt-3 space-y-2 text-sm">
                 {punchCards.map(({ vehicle, card }) => (
-                  <div key={vehicle.id} className="rounded-md border border-slate-100 p-2">
-                    <div className="font-semibold text-slate-950">{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}</div>
-                    <div className="text-slate-500">{card?.punch_count ?? 0}/5 punches · {card?.free_rewards_available ?? 0} free rewards</div>
+                  <div key={vehicle.id} className="rounded-md border border-[var(--pos-border)] p-2">
+                    <div className="font-semibold text-[var(--pos-text)]">{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}</div>
+                    <div className="text-[var(--pos-muted)]">{card?.punch_count ?? 0}/5 punches · {card?.free_rewards_available ?? 0} free rewards</div>
                   </div>
                 ))}
-                {!punchCards.length ? <div className="text-slate-500">No vehicle punch cards yet.</div> : null}
+                {!punchCards.length ? <div className="text-[var(--pos-muted)]">No vehicle punch cards yet.</div> : null}
               </div>
-              <div className="mt-4 font-bold text-slate-950">Referrals ({referrals.length})</div>
-              <div className="mt-2 space-y-1 text-sm text-slate-500">{referrals.slice(0, 5).map((referral) => <div key={referral.id}>{referral.status} · {formatMoney(referral.reward_amount)}</div>)}</div>
+              <div className="mt-4 font-bold text-[var(--pos-text)]">Referrals ({referrals.length})</div>
+              <div className="mt-2 space-y-1 text-sm text-[var(--pos-muted)]">{referrals.slice(0, 5).map((referral) => <div key={referral.id}>{referral.status} · {formatMoney(referral.reward_amount)}</div>)}</div>
             </div>
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="font-bold text-slate-950">Vehicles ({vehicles.length})</div>
+            <div className="rounded-lg border border-[var(--pos-border)] p-4">
+              <div className="font-bold text-[var(--pos-text)]">Vehicles ({vehicles.length})</div>
               <div className="mt-3 space-y-2 text-sm">{vehicles.map((vehicle) => <div key={vehicle.id}>{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")} · {vehicle.plate ?? vehicle.vin ?? "No ID"}</div>)}</div>
               <div className="mt-4 grid gap-2">
                 <Input label="Year" value={newVehicle.year} onChange={(event) => setNewVehicle({ ...newVehicle, year: event.target.value })} />
@@ -376,16 +376,16 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
                 <Button onClick={addVehicle}>Add Vehicle</Button>
               </div>
             </div>
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="font-bold text-slate-950">Tickets ({tickets.length})</div>
+            <div className="rounded-lg border border-[var(--pos-border)] p-4">
+              <div className="font-bold text-[var(--pos-text)]">Tickets ({tickets.length})</div>
               <div className="mt-3 space-y-2 text-sm">
                 <div>Total spent: <strong>{formatMoney(tickets.filter((ticket) => ticket.status === "completed").reduce((sum, ticket) => sum + ticket.total, 0))}</strong></div>
                 <div>Last visit: <strong>{tickets[0]?.completed_at ? new Date(tickets[0].completed_at).toLocaleDateString() : "None"}</strong></div>
                 {tickets.slice(0, 6).map((ticket) => <div key={ticket.id}>{ticket.status} · {formatMoney(ticket.total)} · {ticket.service_names ?? "Ticket"}</div>)}
               </div>
             </div>
-            <div className="rounded-lg border border-slate-200 p-4">
-              <div className="font-bold text-slate-950">Service History ({history.length})</div>
+            <div className="rounded-lg border border-[var(--pos-border)] p-4">
+              <div className="font-bold text-[var(--pos-text)]">Service History ({history.length})</div>
               <div className="mt-3 space-y-2 text-sm">{history.slice(0, 8).map((entry) => <div key={entry.id}>{new Date(entry.service_date).toLocaleDateString()} · {entry.mileage.toLocaleString()} mi · {entry.oil_type ?? "Service"}</div>)}</div>
             </div>
           </div>

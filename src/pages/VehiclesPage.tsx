@@ -320,7 +320,7 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
       ) : null}
       {error ? <Card className="p-4 text-sm text-red-200">{error}</Card> : null}
       {hasSearchOrFilter ? <Card className="p-4">
-        <div className="mb-3 flex items-center justify-between text-sm text-slate-500">
+        <div className="mb-3 flex items-center justify-between text-sm text-[var(--pos-muted)]">
           <span>{resultCount} matching vehicle{resultCount === 1 ? "" : "s"}</span>
           {loading ? <span>Searching...</span> : null}
         </div>
@@ -331,16 +331,16 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
             {vehicles.map((vehicle) => (
               <button key={vehicle.id} onClick={() => void openVehicle(vehicle)} className="flex w-full items-center justify-between py-3 text-left">
                 <div>
-                  <div className="font-semibold text-slate-950">{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}</div>
-                  <div className="text-sm text-slate-500">{vehicle.plate ?? "No plate"} {vehicle.plate_state ?? ""} · {vehicle.customer_name ?? "No owner"}</div>
+                  <div className="font-semibold text-[var(--pos-text)]">{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}</div>
+                  <div className="text-sm text-[var(--pos-muted)]">{vehicle.plate ?? "No plate"} {vehicle.plate_state ?? ""} · {vehicle.customer_name ?? "No owner"}</div>
                 </div>
-                <div className="text-sm text-slate-500">{vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : "Mileage needed"}</div>
+                <div className="text-sm text-[var(--pos-muted)]">{vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : "Mileage needed"}</div>
               </button>
             ))}
           </div>
         )}
         {hasSearchOrFilter && vehicles.length < resultCount ? (
-          <div className="border-t border-slate-200 pt-4 text-center">
+          <div className="border-t border-[var(--pos-border)] pt-4 text-center">
             <Button variant="secondary" disabled={loading} onClick={() => loadVehicles(offset, true)}>Load More</Button>
           </div>
         ) : null}
@@ -348,12 +348,12 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
       {(selected || showAdd) ? (
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-xl font-bold text-slate-950">{selected ? "Vehicle Detail" : "Add Vehicle"}</h3>
+            <h3 className="text-xl font-bold text-[var(--pos-text)]">{selected ? "Vehicle Detail" : "Add Vehicle"}</h3>
             <Button onClick={() => { if (selected) setStartTicketContext({ vehicleId: selected.id, customerId: selected.customer_id, source: "vehicle_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <label className="text-sm font-semibold text-slate-700">Owner
-              <select className="mt-2 h-11 w-full rounded-md border border-slate-200 bg-white px-3" value={form.customer_id} onChange={(event) => setForm({ ...form, customer_id: event.target.value })}>
+            <label className="text-sm font-semibold text-[var(--pos-text)]">Owner
+              <select className="mt-2 h-11 w-full rounded-md border border-[var(--pos-border)] bg-white px-3 text-[var(--pos-text)]" value={form.customer_id} onChange={(event) => setForm({ ...form, customer_id: event.target.value })}>
                 <option value="">Select customer</option>
                 {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.first_name} {customer.last_name}</option>)}
               </select>
@@ -371,11 +371,11 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
           <Button className="mt-3" onClick={saveVehicle}>{selected ? "Save Vehicle" : "Create Vehicle"}</Button>
           {selected ? (
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 p-4 lg:col-span-2">
+              <div className="rounded-lg border border-[var(--pos-border)] p-4 lg:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="font-bold text-slate-950">Vehicle Service Defaults</div>
-                    <div className="text-sm text-slate-500">Oil capacity, oil type, and filter defaults are used as suggestions on future tickets.</div>
+                    <div className="font-bold text-[var(--pos-text)]">Vehicle Service Defaults</div>
+                    <div className="text-sm text-[var(--pos-muted)]">Oil capacity, oil type, and filter defaults are used as suggestions on future tickets.</div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button variant="secondary" onClick={() => setVehicleInfoLookupOpen(true)}>Lookup Vehicle Info</Button>
@@ -383,25 +383,25 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
-                  <span className="rounded-lg bg-slate-50 p-3">Oil capacity: <strong>{selected.oil_capacity ? `${selected.oil_capacity} qt` : "Not saved"}</strong></span>
-                  <span className="rounded-lg bg-slate-50 p-3">Oil type: <strong>{selected.oil_type ?? "Not saved"}</strong></span>
-                  <span className="rounded-lg bg-slate-50 p-3">Oil filter: <strong>{selected.oil_filter_sku ?? "Not saved"}</strong></span>
-                  <span className="rounded-lg bg-slate-50 p-3">Air filter: <strong>{selected.air_filter_sku ?? "Not saved"}</strong></span>
-                  <span className="rounded-lg bg-slate-50 p-3">Cabin filter: <strong>{selected.cabin_filter_sku ?? "Not saved"}</strong></span>
-                  <span className="rounded-lg bg-slate-50 p-3">Verified: <strong>{selected.vehicle_info_verified_at ? new Date(selected.vehicle_info_verified_at).toLocaleDateString() : "Not verified"}</strong></span>
+                  <span className="rounded-lg bg-[var(--pos-panel-2)] p-3">Oil capacity: <strong>{selected.oil_capacity ? `${selected.oil_capacity} qt` : "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-[var(--pos-panel-2)] p-3">Oil type: <strong>{selected.oil_type ?? "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-[var(--pos-panel-2)] p-3">Oil filter: <strong>{selected.oil_filter_sku ?? "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-[var(--pos-panel-2)] p-3">Air filter: <strong>{selected.air_filter_sku ?? "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-[var(--pos-panel-2)] p-3">Cabin filter: <strong>{selected.cabin_filter_sku ?? "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-[var(--pos-panel-2)] p-3">Verified: <strong>{selected.vehicle_info_verified_at ? new Date(selected.vehicle_info_verified_at).toLocaleDateString() : "Not verified"}</strong></span>
                 </div>
                 {selected.vehicle_info_source_title || selected.vehicle_info_notes ? (
-                  <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                  <div className="mt-3 rounded-lg bg-[var(--pos-panel-2)] p-3 text-sm text-[var(--pos-muted)]">
                     {selected.vehicle_info_source_title ? <div><strong>Source:</strong> {selected.vehicle_info_source_title}</div> : null}
                     {selected.vehicle_info_notes ? <div className="mt-1"><strong>Notes:</strong> {selected.vehicle_info_notes}</div> : null}
                   </div>
                 ) : null}
               </div>
-              <div className="rounded-lg border border-slate-200 p-4 lg:col-span-2">
+              <div className="rounded-lg border border-[var(--pos-border)] p-4 lg:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="font-bold text-slate-950">VIN Decoder</div>
-                    <div className="text-sm text-slate-500">
+                    <div className="font-bold text-[var(--pos-text)]">VIN Decoder</div>
+                    <div className="text-sm text-[var(--pos-muted)]">
                       {selected.vin ? `VIN ${selected.vin}` : "No VIN saved."} {selected.vin_decoded_at ? `· Last decoded ${new Date(selected.vin_decoded_at).toLocaleDateString()}` : ""}
                     </div>
                   </div>
@@ -416,7 +416,7 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
                   </div>
                 </div>
                 {vehicleDecode ? (
-                  <div className="mt-4 grid gap-2 rounded-lg bg-slate-50 p-3 text-sm md:grid-cols-3">
+                  <div className="mt-4 grid gap-2 rounded-lg bg-[var(--pos-panel-2)] p-3 text-sm md:grid-cols-3">
                     <span><strong>{vehicleDecode.year ?? "-"}</strong> {vehicleDecode.make ?? ""} {vehicleDecode.model ?? ""} {vehicleDecode.trim ?? ""}</span>
                     <span>Engine: {vehicleDecode.engineModel ?? vehicleDecode.engineDisplacementL ?? "-"}</span>
                     <span>Fuel/drive: {[vehicleDecode.fuelType, vehicleDecode.driveType].filter(Boolean).join(" / ") || "-"}</span>
@@ -425,68 +425,68 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
                     <span>Source: {vehicleDecode.source} · {vehicleDecode.confidence}</span>
                   </div>
                 ) : selected.vin_decode_source ? (
-                  <div className="mt-4 grid gap-2 rounded-lg bg-slate-50 p-3 text-sm md:grid-cols-3">
+                  <div className="mt-4 grid gap-2 rounded-lg bg-[var(--pos-panel-2)] p-3 text-sm md:grid-cols-3">
                     <span>Trim: {selected.trim ?? "-"}</span>
                     <span>Engine: {selected.engine_model ?? selected.engine_displacement_l ?? "-"}</span>
                     <span>Source: {selected.vin_decode_source} · {selected.vin_decode_confidence ?? "unknown"}</span>
                   </div>
                 ) : null}
               </div>
-              <div className="rounded-lg border border-slate-200 p-4 lg:col-span-2">
+              <div className="rounded-lg border border-[var(--pos-border)] p-4 lg:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="font-bold text-slate-950">External & Local Vehicle Data</div>
-                    <div className="text-sm text-slate-500">Local history is always available. EPA matching appears only when enabled in Settings.</div>
+                    <div className="font-bold text-[var(--pos-text)]">External & Local Vehicle Data</div>
+                    <div className="text-sm text-[var(--pos-muted)]">Local history is always available. EPA matching appears only when enabled in Settings.</div>
                   </div>
                   {epaEnabled ? <Button variant="secondary" disabled={epaLoading} onClick={() => void enrichWithEpa()}>{epaLoading ? "Searching..." : "Enrich EPA Data"}</Button> : null}
                 </div>
                 {fitment ? (
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-lg bg-slate-50 p-3 text-sm">
-                      <div className="font-bold text-slate-900">Local Fitment Suggestions</div>
-                      {fitment.parts.slice(0, 4).map((part) => <div key={`${part.source}-${part.sku ?? part.name}`} className="mt-2 text-slate-600">{part.name} {part.sku ? `· ${part.sku}` : ""} · {part.source}</div>)}
-                      {!fitment.parts.length ? <div className="mt-2 text-slate-500">No prior parts found.</div> : null}
+                    <div className="rounded-lg bg-[var(--pos-panel-2)] p-3 text-sm">
+                      <div className="font-bold text-[var(--pos-text)]">Local Fitment Suggestions</div>
+                      {fitment.parts.slice(0, 4).map((part) => <div key={`${part.source}-${part.sku ?? part.name}`} className="mt-2 text-[var(--pos-muted)]">{part.name} {part.sku ? `· ${part.sku}` : ""} · {part.source}</div>)}
+                      {!fitment.parts.length ? <div className="mt-2 text-[var(--pos-muted)]">No prior parts found.</div> : null}
                     </div>
-                    <div className="rounded-lg bg-slate-50 p-3 text-sm">
-                      <div className="font-bold text-slate-900">Service Specs From History</div>
-                      {fitment.specs?.map((spec) => <div key={`${spec.category}-${spec.source}`} className="mt-2 text-slate-600">{spec.category.replace("_", " ")}: {spec.value ?? "-"} {spec.unit ?? ""} · {spec.source}</div>)}
-                      {!fitment.specs?.length ? <div className="mt-2 text-slate-500">No prior oil capacity found.</div> : null}
+                    <div className="rounded-lg bg-[var(--pos-panel-2)] p-3 text-sm">
+                      <div className="font-bold text-[var(--pos-text)]">Service Specs From History</div>
+                      {fitment.specs?.map((spec) => <div key={`${spec.category}-${spec.source}`} className="mt-2 text-[var(--pos-muted)]">{spec.category.replace("_", " ")}: {spec.value ?? "-"} {spec.unit ?? ""} · {spec.source}</div>)}
+                      {!fitment.specs?.length ? <div className="mt-2 text-[var(--pos-muted)]">No prior oil capacity found.</div> : null}
                     </div>
                   </div>
                 ) : null}
                 {epaMatches.length ? (
-                  <div className="mt-4 divide-y divide-slate-200 rounded-lg border border-slate-200 text-sm">
+                  <div className="mt-4 divide-y divide-[var(--pos-border)] rounded-lg border border-[var(--pos-border)] text-sm">
                     {epaMatches.slice(0, 5).map((match) => (
                       <div key={match.epaVehicleId} className="grid gap-2 p-3 md:grid-cols-[1fr_1fr_auto]">
-                        <span className="font-semibold text-slate-800">{match.year} {match.make} {match.model} · {match.transmission ?? match.trim ?? "EPA option"}</span>
-                        <span className="text-slate-600">{match.fuelType ?? "-"} · {match.drive ?? "-"} · MPG {match.mpgCombined ?? "-"}</span>
+                        <span className="font-semibold text-[var(--pos-text)]">{match.year} {match.make} {match.model} · {match.transmission ?? match.trim ?? "EPA option"}</span>
+                        <span className="text-[var(--pos-muted)]">{match.fuelType ?? "-"} · {match.drive ?? "-"} · MPG {match.mpgCombined ?? "-"}</span>
                         <Button size="sm" variant="secondary" onClick={() => void applyEpaMatch(match, false)}>Apply Empty</Button>
                       </div>
                     ))}
                   </div>
                 ) : null}
               </div>
-              <div className="rounded-lg border border-slate-200 p-4 lg:col-span-2">
-                <div className="font-bold text-slate-950">Loyalty Punch Card</div>
-                <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-3">
+              <div className="rounded-lg border border-[var(--pos-border)] p-4 lg:col-span-2">
+                <div className="font-bold text-[var(--pos-text)]">Loyalty Punch Card</div>
+                <div className="mt-3 grid gap-2 text-sm text-[var(--pos-muted)] md:grid-cols-3">
                   <span>Current punches: <strong>{punchCard?.punch_count ?? 0}</strong></span>
                   <span>Free rewards available: <strong>{punchCard?.free_rewards_available ?? 0}</strong></span>
                   <span>Sync status: <strong>{punchCard?.sync_status ?? "No local punch card yet"}</strong></span>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--pos-panel-2)]">
                   <div className="h-full bg-[var(--brand-primary)]" style={{ width: `${Math.min(((punchCard?.punch_count ?? 0) / 5) * 100, 100)}%` }} />
                 </div>
-                <div className="mt-3 space-y-1 text-sm text-slate-500">
+                <div className="mt-3 space-y-1 text-sm text-[var(--pos-muted)]">
                   {punchEvents.slice(0, 5).map((event) => <div key={event.id}>{new Date(event.created_at).toLocaleDateString()} · {event.event_type} · punch {event.punch_delta} · reward {event.reward_delta}</div>)}
                   {!punchEvents.length ? <div>No punch history yet.</div> : null}
                 </div>
               </div>
-              <div className="rounded-lg border border-slate-200 p-4">
-                <div className="font-bold text-slate-950">Tickets ({tickets.length})</div>
+              <div className="rounded-lg border border-[var(--pos-border)] p-4">
+                <div className="font-bold text-[var(--pos-text)]">Tickets ({tickets.length})</div>
                 <div className="mt-3 space-y-2 text-sm">{tickets.slice(0, 8).map((ticket) => <div key={ticket.id}>{ticket.status} · {ticket.service_names ?? "Ticket"} · {new Date(ticket.created_at).toLocaleDateString()}</div>)}</div>
               </div>
-              <div className="rounded-lg border border-slate-200 p-4">
-                <div className="font-bold text-slate-950">Service History ({history.length})</div>
+              <div className="rounded-lg border border-[var(--pos-border)] p-4">
+                <div className="font-bold text-[var(--pos-text)]">Service History ({history.length})</div>
                 <div className="mt-3 space-y-2 text-sm">{history.slice(0, 8).map((entry) => <div key={entry.id}>{new Date(entry.service_date).toLocaleDateString()} · {entry.mileage.toLocaleString()} mi · {entry.oil_type ?? "Service"}</div>)}</div>
               </div>
             </div>

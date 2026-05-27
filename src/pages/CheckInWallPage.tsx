@@ -67,7 +67,7 @@ function BaySelectionModal({
   onSelect: (bay: "Bay 1" | "Bay 2") => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-md rounded-[var(--pos-radius-xl)] border border-[var(--pos-border)] bg-[var(--pos-panel)] p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>

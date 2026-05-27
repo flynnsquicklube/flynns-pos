@@ -63,8 +63,8 @@ export function TicketsPage({ onOpenTicket }: TicketsPageProps) {
     <section className="space-y-5">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-950">Service Bay Board</h2>
-          <p className="text-sm text-slate-500">Live local ticket flow for the shop floor.</p>
+          <h2 className="text-2xl font-black text-[var(--pos-text)]">Service Bay Board</h2>
+          <p className="text-sm text-[var(--pos-muted)]">Live local ticket flow for the shop floor.</p>
         </div>
         <Badge tone="green">{loading ? "Loading tickets" : `${tickets.length} local tickets`}</Badge>
       </div>
@@ -76,24 +76,24 @@ export function TicketsPage({ onOpenTicket }: TicketsPageProps) {
           return (
             <Card key={column.key} className="min-h-96 p-4">
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="font-bold text-slate-950">{column.title}</h3>
-                <span className="rounded-full bg-white px-2.5 py-1 text-sm text-slate-600">{loading ? "--" : items.length}</span>
+                <h3 className="font-bold text-[var(--pos-text)]">{column.title}</h3>
+                <span className="rounded-full bg-white px-2.5 py-1 text-sm text-[var(--pos-muted)]">{loading ? "--" : items.length}</span>
               </div>
               {items.length === 0 ? (
-                <div className="rounded-md border border-dashed border-slate-200 bg-white/60 p-5 text-center text-sm text-slate-500">No tickets</div>
+                <div className="rounded-md border border-dashed border-[var(--pos-border)] bg-white/60 p-5 text-center text-sm text-[var(--pos-muted)]">No tickets</div>
               ) : (
                 <div className="space-y-3">
                   {items.map((ticket) => (
-                    <button key={ticket.id} onClick={() => onOpenTicket(ticket.id)} className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-[var(--brand-primary)] hover:bg-slate-50">
+                    <button key={ticket.id} onClick={() => onOpenTicket(ticket.id)} className="w-full rounded-lg border border-[var(--pos-border)] bg-white p-4 text-left transition hover:border-[var(--brand-primary)] hover:bg-[var(--pos-panel-2)]">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-base font-bold text-slate-950">{customerName(ticket)}</div>
-                          <div className="mt-1 text-sm text-slate-500">{vehicleName(ticket)}</div>
+                          <div className="text-base font-bold text-[var(--pos-text)]">{customerName(ticket)}</div>
+                          <div className="mt-1 text-sm text-[var(--pos-muted)]">{vehicleName(ticket)}</div>
                         </div>
                         <Badge tone={ticket.status === "completed" ? "green" : "blue"}>{statusLabels[ticket.status]}</Badge>
                       </div>
-                      <div className="mt-3 text-sm text-slate-600">{ticket.service_names ?? "No services"}</div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                      <div className="mt-3 text-sm text-[var(--pos-muted)]">{ticket.service_names ?? "No services"}</div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-[var(--pos-muted)]">
                         <span>{ticket.vehicle_mileage?.toLocaleString() ?? "No"} mi</span>
                         <span className="text-right">{formatMoney(ticket.total)}</span>
                         <span className="inline-flex items-center gap-1"><ReceiptText size={13} />{createdTime(ticket.created_at)}</span>
@@ -109,12 +109,12 @@ export function TicketsPage({ onOpenTicket }: TicketsPageProps) {
       </div>
       {tickets.some((ticket) => ticket.status === "canceled") ? (
         <Card className="p-4">
-          <h3 className="font-bold text-slate-950">Canceled</h3>
+          <h3 className="font-bold text-[var(--pos-text)]">Canceled</h3>
           <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {tickets.filter((ticket) => ticket.status === "canceled").map((ticket) => (
-              <button key={ticket.id} onClick={() => onOpenTicket(ticket.id)} className="rounded-md border border-slate-200 bg-white p-3 text-left hover:border-[var(--brand-primary)]">
-                <div className="font-semibold text-slate-950">{customerName(ticket)}</div>
-                <div className="text-sm text-slate-500">{vehicleName(ticket)} - {formatMoney(ticket.total)}</div>
+              <button key={ticket.id} onClick={() => onOpenTicket(ticket.id)} className="rounded-md border border-[var(--pos-border)] bg-white p-3 text-left hover:border-[var(--brand-primary)]">
+                <div className="font-semibold text-[var(--pos-text)]">{customerName(ticket)}</div>
+                <div className="text-sm text-[var(--pos-muted)]">{vehicleName(ticket)} - {formatMoney(ticket.total)}</div>
               </button>
             ))}
           </div>

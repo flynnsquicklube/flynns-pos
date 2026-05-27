@@ -700,7 +700,7 @@ export function VinCameraScannerModal({ onClose, onVinScanned }: VinCameraScanne
   const statusTone = status === "found" ? "text-green-700" : status === "invalid" || status === "denied" || status === "no_camera" || status === "error" ? "text-amber-700" : "text-[var(--pos-muted)]";
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Scan VIN Barcode">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Scan VIN Barcode">
       <section className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-2xl">
         <header className="flex items-start justify-between gap-4 border-b border-[var(--pos-border)] px-6 py-5">
           <div>

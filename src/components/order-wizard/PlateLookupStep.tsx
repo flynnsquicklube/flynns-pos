@@ -44,12 +44,12 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-[var(--brand-primary-light)] text-[var(--brand-primary)]">
           <CarFront size={42} />
         </div>
-        <h1 className="mt-6 text-3xl font-bold text-slate-950">License Plate Search</h1>
-        <p className="mt-2 text-sm text-slate-500">Search local vehicle records by plate and state.</p>
+        <h1 className="mt-6 text-3xl font-bold text-[var(--pos-text)]">License Plate Search</h1>
+        <p className="mt-2 text-sm text-[var(--pos-muted)]">Search local vehicle records by plate and state.</p>
         <div className="mx-auto mt-8 grid max-w-xl gap-3 text-left md:grid-cols-[160px_1fr]">
-          <label className="text-sm font-semibold text-slate-700">
+          <label className="text-sm font-semibold text-[var(--pos-text)]">
             State
-            <select className="mt-2 h-14 w-full rounded-md border border-[var(--brand-border)] bg-white px-3 text-lg font-semibold text-slate-900 outline-none focus:border-[var(--brand-primary)] focus:ring-4 focus:ring-[var(--brand-primary-light)]" value={plateState} onChange={(event) => onStateChange(event.target.value)}>
+            <select className="mt-2 h-14 w-full rounded-md border border-[var(--brand-border)] bg-white px-3 text-lg font-semibold text-[var(--pos-text)] outline-none focus:border-[var(--brand-primary)] focus:ring-4 focus:ring-[var(--brand-primary-light)]" value={plateState} onChange={(event) => onStateChange(event.target.value)}>
               <option value="OH">Ohio</option>
               <option value="IN">Indiana</option>
               <option value="KY">Kentucky</option>
@@ -57,7 +57,7 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
               <option value="PA">Pennsylvania</option>
             </select>
           </label>
-          <label className="text-sm font-semibold text-slate-700">
+          <label className="text-sm font-semibold text-[var(--pos-text)]">
             License Plate
             <Input
               className="mt-2 h-14 text-center text-lg font-semibold uppercase"
@@ -77,8 +77,8 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-black uppercase tracking-wide text-[var(--pos-blue)]">Existing vehicle found</div>
-                <h2 className="mt-1 text-2xl font-black text-slate-950">{[matchedVehicle.year, matchedVehicle.make, matchedVehicle.model].filter(Boolean).join(" ") || "Saved vehicle"}</h2>
-                <div className="mt-3 grid gap-2 text-sm font-semibold text-slate-600 sm:grid-cols-2">
+                <h2 className="mt-1 text-2xl font-black text-[var(--pos-text)]">{[matchedVehicle.year, matchedVehicle.make, matchedVehicle.model].filter(Boolean).join(" ") || "Saved vehicle"}</h2>
+                <div className="mt-3 grid gap-2 text-sm font-semibold text-[var(--pos-muted)] sm:grid-cols-2">
                   <span>Plate: {formatPlateForDisplay(matchedVehicle.plate, matchedVehicle.plate_state)}</span>
                   <span>VIN: {matchedVehicle.vin ?? "Not recorded"}</span>
                   <span>Customer: {matchedCustomer ? `${matchedCustomer.first_name} ${matchedCustomer.last_name}` : "No linked customer"}</span>
@@ -126,7 +126,7 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
         ) : null}
         {searched && !matchedVehicle ? (
           <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 p-5 text-left">
-            <div className="text-lg font-black text-slate-950">No local vehicle found.</div>
+            <div className="text-lg font-black text-[var(--pos-text)]">No local vehicle found.</div>
             <p className="mt-1 text-sm font-semibold text-amber-800">No local vehicle found for {formatPlateForDisplay(plate, plateState)}. Continue with a new vehicle and the plate/state will be filled into Specs.</p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Button disabled={!hasPlate} onClick={onContinue}>Continue with New Vehicle</Button>

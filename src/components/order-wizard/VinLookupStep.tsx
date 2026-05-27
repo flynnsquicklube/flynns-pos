@@ -41,9 +41,9 @@ export function VinLookupStep({ vin, validation, decodeEnabled = false, decodeRe
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-[var(--brand-primary-light)] text-[var(--brand-primary)]">
           <Flame size={42} />
         </div>
-        <h1 className="mt-6 text-3xl font-bold text-slate-950">Awaiting VIN Entry...</h1>
-        <p className="mt-2 text-sm text-slate-500">Scan the VIN barcode, type it manually, or decode it with the free NHTSA vPIC service.</p>
-        <label className="mx-auto mt-8 block max-w-xl text-left text-sm font-semibold text-slate-700">
+        <h1 className="mt-6 text-3xl font-bold text-[var(--pos-text)]">Awaiting VIN Entry...</h1>
+        <p className="mt-2 text-sm text-[var(--pos-muted)]">Scan the VIN barcode, type it manually, or decode it with the free NHTSA vPIC service.</p>
+        <label className="mx-auto mt-8 block max-w-xl text-left text-sm font-semibold text-[var(--pos-text)]">
           VIN
           <Input
             className="mt-2 h-14 text-center text-lg font-semibold"
@@ -56,10 +56,10 @@ export function VinLookupStep({ vin, validation, decodeEnabled = false, decodeRe
             }}
           />
         </label>
-        <p className="mt-2 text-xs text-slate-500">Press Enter to search local vehicles first. Manual entry always remains available.</p>
+        <p className="mt-2 text-xs text-[var(--pos-muted)]">Press Enter to search local vehicles first. Manual entry always remains available.</p>
         {vinLengthWarning ? <p className="mt-3 text-sm text-amber-700">{vinLengthWarning}</p> : null}
         {validation ? <p className="mt-2 text-sm text-amber-700">{validation}</p> : null}
-        {decodeResult ? <p className="mt-2 text-sm text-slate-600">{decodeResult}</p> : null}
+        {decodeResult ? <p className="mt-2 text-sm text-[var(--pos-muted)]">{decodeResult}</p> : null}
         {decodedVehicle ? (
           <div className="mx-auto mt-5 max-w-2xl rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-bg-soft)] p-4 text-left">
             <div className="flex flex-wrap items-start justify-between gap-3">

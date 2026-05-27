@@ -204,7 +204,7 @@ export function PackageEditorDrawer({ mode, servicePackage, nextSortOrder, onClo
   }).slice(0, 10);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={mode === "create" ? "Add Oil Change Package" : "Edit Oil Change Package"}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={mode === "create" ? "Add Oil Change Package" : "Edit Oil Change Package"}>
       <section className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-2xl">
         <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--pos-border)] bg-white/95 px-6 py-5 backdrop-blur">
           <div>

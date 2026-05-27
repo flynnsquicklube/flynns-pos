@@ -20,8 +20,8 @@ export function VehicleMethodStep({ onSelectCustomer, onSelectVin, onSelectPlate
     <div className="flex min-h-[520px] items-center justify-center">
       <Card className="w-full max-w-4xl p-10">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-slate-950">Choose a Starting Point</h1>
-          <p className="mt-2 text-sm text-slate-500">Start with the fastest information available at the service counter.</p>
+          <h1 className="text-3xl font-bold text-[var(--pos-text)]">Choose a Starting Point</h1>
+          <p className="mt-2 text-sm text-[var(--pos-muted)]">Start with the fastest information available at the service counter.</p>
         </div>
         <div className="mx-auto mt-9 grid max-w-4xl gap-5 md:grid-cols-2">
           {options.map((option) => {
@@ -31,8 +31,8 @@ export function VehicleMethodStep({ onSelectCustomer, onSelectVin, onSelectPlate
                 <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-[var(--brand-primary-light)] text-[var(--brand-primary)]">
                   <Icon size={40} />
                 </div>
-                <div className="mt-5 text-xl font-bold text-slate-950">{option.label}</div>
-                <div className="mt-2 text-sm text-slate-500">{option.helper}</div>
+                <div className="mt-5 text-xl font-bold text-[var(--pos-text)]">{option.label}</div>
+                <div className="mt-2 text-sm text-[var(--pos-muted)]">{option.helper}</div>
               </button>
             );
           })}

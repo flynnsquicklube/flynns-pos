@@ -717,10 +717,12 @@ export function SettingsPage() {
   return (
     <section className="space-y-5">
       <PageHeader title="Settings" subtitle="Configure shop info, services, pricing, integrations, and database tools." />
-      <div className="flex flex-wrap gap-2 border-b border-[var(--pos-border)]">
-        {tabs.map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`px-3 py-3 text-sm font-semibold ${activeTab === tab ? "border-b-2 border-[var(--pos-blue)] text-[var(--pos-blue-2)]" : "text-[var(--pos-muted)] hover:text-[var(--pos-text)]"}`}>{tab}</button>
-        ))}
+      <div className="-mx-1 overflow-x-auto px-1">
+        <div className="flex min-w-max gap-1 rounded-[var(--pos-radius-lg)] border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-1.5">
+          {tabs.map((tab) => (
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`min-h-9 whitespace-nowrap rounded-[var(--pos-radius-md)] px-3.5 text-sm font-bold transition ${activeTab === tab ? "bg-[var(--pos-blue)] text-white shadow-sm" : "text-[var(--pos-muted)] hover:bg-[var(--pos-card)] hover:text-[var(--pos-text)]"}`}>{tab}</button>
+          ))}
+        </div>
       </div>
       {activeTab === "Business Profile" ? (
         <div className="space-y-5">
@@ -766,21 +768,21 @@ export function SettingsPage() {
       ) : null}
       {activeTab === "Tax" || activeTab === "Database" ? (
         <Card className="overflow-hidden">
-          <div className="grid grid-cols-[1fr_280px_120px] items-center gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <div className="grid grid-cols-[1fr_280px_120px] items-center gap-4 border-b border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-5 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--pos-muted)]">
             <span>Operation</span>
             <span>Address</span>
             <span>Status</span>
           </div>
           <div className="grid grid-cols-[1fr_280px_120px] items-center gap-4 px-5 py-4 text-sm">
             <div>
-              <div className="font-bold text-slate-950">{shop.name}</div>
-              <div className="text-slate-500">Local database: {status?.databaseReady ? "Ready" : "Loading"}</div>
+              <div className="font-bold text-[var(--pos-text)]">{shop.name}</div>
+              <div className="text-[var(--pos-muted)]">Local database: {status?.databaseReady ? "Ready" : "Loading"}</div>
             </div>
-            <div className="text-slate-600">{shop.address}</div>
+            <div className="text-[var(--pos-muted)]">{shop.address}</div>
             <div><Badge tone="green">Active</Badge></div>
           </div>
-          <div className="border-t border-slate-200 p-5">
-            <h3 className="font-bold text-slate-950">Operation Info</h3>
+          <div className="border-t border-[var(--pos-border)] p-5">
+            <h3 className="font-bold text-[var(--pos-text)]">Operation Info</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
               <Input label="Shop name" value={shop.name} onChange={(event) => setShop({ ...shop, name: event.target.value })} />
               <Input label="Address" value={shop.address} onChange={(event) => setShop({ ...shop, address: event.target.value })} />
@@ -788,16 +790,16 @@ export function SettingsPage() {
             </div>
             <Button className="mt-3" onClick={saveShop}>Save Operation</Button>
           </div>
-          <div className="border-t border-slate-200 p-5">
-            <h3 className="font-bold text-slate-950">Local Pricing</h3>
+          <div className="border-t border-[var(--pos-border)] p-5">
+            <h3 className="font-bold text-[var(--pos-text)]">Local Pricing</h3>
             <div className="mt-3 flex max-w-md items-end gap-3">
               <Input label="Tax rate percent" type="number" step="0.01" value={taxRate} onChange={(event) => setTaxRate(event.target.value)} helperText="Example: enter 7.8 for 7.8%." />
               <Button onClick={saveTaxRate}>Save</Button>
             </div>
-            <div className="mt-4 text-sm text-slate-500">Database: {status?.databasePath ?? "Electron userData path"} · Pending sync: {status?.syncQueueCount ?? 0}</div>
+            <div className="mt-4 text-sm text-[var(--pos-muted)]">Database: {status?.databasePath ?? "Electron userData path"} · Pending sync: {status?.syncQueueCount ?? 0}</div>
             <div className="mt-3 flex flex-wrap gap-2"><Button variant="secondary" disabled={checkingHealth} onClick={checkDatabase}>{checkingHealth ? "Checking..." : "Run Database Check"}</Button><Button variant="secondary" disabled={diagnosticsBusy} onClick={() => void exportDiagnosticBundle()}>{diagnosticsBusy ? "Exporting..." : "Export Diagnostics"}</Button></div>
             {health ? (
-              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+              <div className="mt-4 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4 text-sm">
                 <div className="flex flex-wrap gap-3">
                   <Badge tone={health.errors.length ? "red" : health.warnings.length ? "yellow" : "green"}>{health.errors.length ? "Errors" : health.warnings.length ? "Warnings" : "Passed"}</Badge>
                   <span>Customers: <strong>{health.counts.customers}</strong></span>
@@ -821,16 +823,16 @@ export function SettingsPage() {
             ) : null}
           </div>
           {activeTab === "Database" ? (
-            <div className="space-y-5 border-t border-slate-200 p-5">
+            <div className="space-y-5 border-t border-[var(--pos-border)] p-5">
               <div>
-                <h3 className="font-bold text-slate-950">Database & App Data</h3>
+                <h3 className="font-bold text-[var(--pos-text)]">Database & App Data</h3>
                 <div className="mt-3 grid gap-3 text-sm md:grid-cols-2">
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-xs font-bold uppercase text-slate-500">SQLite database path</span><span className="break-all text-slate-700">{appPaths?.databasePath ?? status?.databasePath ?? "Open in Electron to view path."}</span></div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-xs font-bold uppercase text-slate-500">App data folder</span><span className="break-all text-slate-700">{appPaths?.userDataPath ?? "Open in Electron to view path."}</span></div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-xs font-bold uppercase text-slate-500">Version / Runtime</span><span className="text-slate-700">App {platformInfo?.appVersion ?? "-"} · Electron {platformInfo?.electronVersion ?? "-"} · Node {platformInfo?.nodeVersion ?? "-"}</span></div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-xs font-bold uppercase text-slate-500">Platform</span><span className="text-slate-700">{platformInfo ? `${platformInfo.platform} ${platformInfo.arch}` : "-"}</span></div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-xs font-bold uppercase text-slate-500">Last backup</span><span className="text-slate-700">{lastBackup ? `${new Date(lastBackup.created_at).toLocaleString()} · ${lastBackup.file_name}` : "No successful backup recorded."}</span></div>
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="block text-xs font-bold uppercase text-slate-500">Database size</span><span className="text-slate-700">{lastBackup?.database_size_bytes ? `${(lastBackup.database_size_bytes / 1024 / 1024).toFixed(2)} MB at last backup` : "Available after first backup."}</span></div>
+                  <div className="rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-3"><span className="block text-xs font-bold uppercase text-[var(--pos-muted)]">SQLite database path</span><span className="break-all text-[var(--pos-text)]">{appPaths?.databasePath ?? status?.databasePath ?? "Open in Electron to view path."}</span></div>
+                  <div className="rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-3"><span className="block text-xs font-bold uppercase text-[var(--pos-muted)]">App data folder</span><span className="break-all text-[var(--pos-text)]">{appPaths?.userDataPath ?? "Open in Electron to view path."}</span></div>
+                  <div className="rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-3"><span className="block text-xs font-bold uppercase text-[var(--pos-muted)]">Version / Runtime</span><span className="text-[var(--pos-text)]">App {platformInfo?.appVersion ?? "-"} · Electron {platformInfo?.electronVersion ?? "-"} · Node {platformInfo?.nodeVersion ?? "-"}</span></div>
+                  <div className="rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-3"><span className="block text-xs font-bold uppercase text-[var(--pos-muted)]">Platform</span><span className="text-[var(--pos-text)]">{platformInfo ? `${platformInfo.platform} ${platformInfo.arch}` : "-"}</span></div>
+                  <div className="rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-3"><span className="block text-xs font-bold uppercase text-[var(--pos-muted)]">Last backup</span><span className="text-[var(--pos-text)]">{lastBackup ? `${new Date(lastBackup.created_at).toLocaleString()} · ${lastBackup.file_name}` : "No successful backup recorded."}</span></div>
+                  <div className="rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-3"><span className="block text-xs font-bold uppercase text-[var(--pos-muted)]">Database size</span><span className="text-[var(--pos-text)]">{lastBackup?.database_size_bytes ? `${(lastBackup.database_size_bytes / 1024 / 1024).toFixed(2)} MB at last backup` : "Available after first backup."}</span></div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button onClick={() => void createBackup()} disabled={backupBusy}>{backupBusy ? "Creating..." : "Create Backup"}</Button>
@@ -854,20 +856,20 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h4 className="font-bold text-slate-950">Recent Local Errors</h4>
+                  <h4 className="font-bold text-[var(--pos-text)]">Recent Local Errors</h4>
                   <Button size="sm" variant="secondary" onClick={() => void clearResolvedLocalErrors().then(refreshDatabaseTools)}>Clear Resolved</Button>
                 </div>
-                <div className="mt-3 divide-y divide-slate-200 text-sm">
+                <div className="mt-3 divide-y divide-[var(--pos-border)] text-sm">
                   {localErrors.map((entry) => (
                     <div key={entry.id} className="grid gap-2 py-2 md:grid-cols-[160px_1fr_auto]">
-                      <span className="font-semibold text-slate-700">{entry.source}<span className="block text-xs text-slate-500">{new Date(entry.created_at).toLocaleString()}</span></span>
-                      <span className="text-slate-700">{entry.message}</span>
+                      <span className="font-semibold text-[var(--pos-text)]">{entry.source}<span className="block text-xs text-[var(--pos-muted)]">{new Date(entry.created_at).toLocaleString()}</span></span>
+                      <span className="text-[var(--pos-text)]">{entry.message}</span>
                       <Button size="sm" variant="secondary" onClick={() => void markLocalErrorResolved(entry.id).then(refreshDatabaseTools)}>Resolve</Button>
                     </div>
                   ))}
-                  {!localErrors.length ? <div className="py-2 text-slate-500">No unresolved local errors.</div> : null}
+                  {!localErrors.length ? <div className="py-2 text-[var(--pos-muted)]">No unresolved local errors.</div> : null}
                 </div>
               </div>
             </div>
@@ -1112,20 +1114,20 @@ export function SettingsPage() {
       {activeTab === "Advanced" ? (
         <div className="space-y-5">
           <Card className="p-5">
-            <h3 className="text-xl font-bold text-slate-950">Integration Registry</h3>
-            <p className="mt-1 text-sm text-slate-500">Internet integrations are opt-in. SQLite and local history remain the source of truth.</p>
+            <h3 className="text-xl font-bold text-[var(--pos-text)]">Integration Registry</h3>
+            <p className="mt-1 text-sm text-[var(--pos-muted)]">Internet integrations are opt-in. SQLite and local history remain the source of truth.</p>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {integrations.map((integration) => (
-                <div key={integration.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div key={integration.id} className="rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-bold text-slate-950">{integration.name}</div>
-                      <div className="text-xs font-semibold uppercase text-slate-500">{integration.provider}</div>
+                      <div className="font-bold text-[var(--pos-text)]">{integration.name}</div>
+                      <div className="text-xs font-semibold uppercase text-[var(--pos-muted)]">{integration.provider}</div>
                     </div>
                     <Badge tone={integration.status === "configured" ? "green" : integration.status === "error" ? "red" : "slate"}>{integration.status.replace("_", " ")}</Badge>
                   </div>
-                  <p className="mt-3 text-sm text-slate-600">{integration.description}</p>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
+                  <p className="mt-3 text-sm text-[var(--pos-muted)]">{integration.description}</p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--pos-muted)]">
                     <span>{integration.isFreePublicApi ? "Free/public" : "External provider"}</span>
                     <span>{integration.requiresInternet ? "Internet" : "Offline"}</span>
                     <span>{integration.requiresApiKey ? "Key required" : "No key"}</span>
@@ -1137,17 +1139,17 @@ export function SettingsPage() {
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-950">Vehicle Info Lookup</h3>
-                <p className="mt-1 text-sm text-slate-500">Local history and manual search links help employees verify oil capacity, oil type, and filters. Web results are never saved without employee confirmation.</p>
-                <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-3">
+                <h3 className="text-xl font-bold text-[var(--pos-text)]">Vehicle Info Lookup</h3>
+                <p className="mt-1 text-sm text-[var(--pos-muted)]">Local history and manual search links help employees verify oil capacity, oil type, and filters. Web results are never saved without employee confirmation.</p>
+                <div className="mt-3 grid gap-2 text-sm text-[var(--pos-muted)] md:grid-cols-3">
                   <span>Local History: <strong>Enabled</strong></span>
                   <span>Manual Search Links: <strong>Enabled</strong></span>
                   <span>Google JSON API: <strong>{vehicleInfoSearchStatus?.status.replace("_", " ") ?? "disabled"}</strong></span>
                 </div>
-                <p className="mt-2 text-sm text-slate-500">{vehicleInfoSearchStatus?.message ?? "Manual search links are available."}</p>
-                <p className="mt-2 text-xs text-slate-500">Use environment variables VITE_GOOGLE_SEARCH_API_KEY and VITE_GOOGLE_SEARCH_CX, or masked app settings later. No key is committed.</p>
+                <p className="mt-2 text-sm text-[var(--pos-muted)]">{vehicleInfoSearchStatus?.message ?? "Manual search links are available."}</p>
+                <p className="mt-2 text-xs text-[var(--pos-muted)]">Use environment variables VITE_GOOGLE_SEARCH_API_KEY and VITE_GOOGLE_SEARCH_CX, or masked app settings later. No key is committed.</p>
               </div>
-              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              <label className="flex items-center gap-2 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-3 py-2 text-sm font-semibold text-[var(--pos-text)]">
                 <input type="checkbox" checked={vehicleInfoSearchEnabled} onChange={(event) => void toggleVehicleInfoSearch(event.target.checked)} />
                 Enable Google Vehicle Search
               </label>
@@ -1156,16 +1158,16 @@ export function SettingsPage() {
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-950">NHTSA vPIC VIN Decoder</h3>
-                <p className="mt-1 text-sm text-slate-500">Uses the public NHTSA vPIC VIN decoder for year, make, model, engine, body, and manufacturer data.</p>
-                <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-4">
+                <h3 className="text-xl font-bold text-[var(--pos-text)]">NHTSA vPIC VIN Decoder</h3>
+                <p className="mt-1 text-sm text-[var(--pos-muted)]">Uses the public NHTSA vPIC VIN decoder for year, make, model, engine, body, and manufacturer data.</p>
+                <div className="mt-3 grid gap-2 text-sm text-[var(--pos-muted)] md:grid-cols-4">
                   <span>Provider: <strong>{vinSettings.provider}</strong></span>
                   <span>Status: <strong>{vinDecoderEnabled ? "Enabled" : "Disabled"}</strong></span>
                   <span>Timeout: <strong>{vinSettings.timeoutMs}ms</strong></span>
                   <span>Cache: <strong>{vinSettings.cacheDays} days</strong></span>
                 </div>
               </div>
-              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              <label className="flex items-center gap-2 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-3 py-2 text-sm font-semibold text-[var(--pos-text)]">
                 <input type="checkbox" checked={vinDecoderEnabled} onChange={(event) => void toggleVinDecoder(event.target.checked)} />
                 Enable VIN Decoder
               </label>
@@ -1175,8 +1177,8 @@ export function SettingsPage() {
               <Button className="mt-7" disabled={!vinDecoderEnabled || vinTesting} onClick={testVinDecode}>{vinTesting ? "Decoding..." : "Test Decode"}</Button>
             </div>
             {vinTestResult ? (
-              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-                <div className="font-bold text-slate-950">{vinTestResult.message}</div>
+              <div className="mt-4 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4 text-sm">
+                <div className="font-bold text-[var(--pos-text)]">{vinTestResult.message}</div>
                 {vinTestResult.data ? (
                   <div className="mt-2 grid gap-2 md:grid-cols-3">
                     <span>{vinTestResult.data.year ?? "-"} {vinTestResult.data.make ?? ""} {vinTestResult.data.model ?? ""}</span>
@@ -1186,7 +1188,7 @@ export function SettingsPage() {
                 ) : null}
                 {vinTestResult.data?.raw ? (
                   <details className="mt-3">
-                    <summary className="cursor-pointer font-semibold text-slate-700">Raw response</summary>
+                    <summary className="cursor-pointer font-semibold text-[var(--pos-text)]">Raw response</summary>
                     <pre className="mt-2 max-h-56 overflow-auto rounded bg-white p-3 text-xs">{JSON.stringify(vinTestResult.data.raw, null, 2)}</pre>
                   </details>
                 ) : null}
@@ -1196,11 +1198,11 @@ export function SettingsPage() {
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-950">EPA FuelEconomy.gov</h3>
-                <p className="mt-1 text-sm text-slate-500">Optional public vehicle metadata and MPG matching by year, make, and model. Results are cached locally.</p>
-                <p className="mt-2 text-sm text-slate-500">Cache entries: <strong>{epaCacheCount}</strong></p>
+                <h3 className="text-xl font-bold text-[var(--pos-text)]">EPA FuelEconomy.gov</h3>
+                <p className="mt-1 text-sm text-[var(--pos-muted)]">Optional public vehicle metadata and MPG matching by year, make, and model. Results are cached locally.</p>
+                <p className="mt-2 text-sm text-[var(--pos-muted)]">Cache entries: <strong>{epaCacheCount}</strong></p>
               </div>
-              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              <label className="flex items-center gap-2 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-3 py-2 text-sm font-semibold text-[var(--pos-text)]">
                 <input type="checkbox" checked={epaEnabled} onChange={(event) => void toggleEpa(event.target.checked)} />
                 Enable EPA Lookup
               </label>
@@ -1214,12 +1216,12 @@ export function SettingsPage() {
                   <Button className="mt-7" disabled={epaTesting} onClick={() => void testEpa()}>{epaTesting ? "Searching..." : "Test EPA Match"}</Button>
                 </div>
                 {epaResults.length ? (
-                  <div className="mt-4 divide-y divide-slate-200 rounded-lg border border-slate-200 text-sm">
+                  <div className="mt-4 divide-y divide-[var(--pos-border)] rounded-lg border border-[var(--pos-border)] text-sm">
                     {epaResults.slice(0, 5).map((item) => (
                       <div key={item.epaVehicleId} className="grid gap-2 p-3 md:grid-cols-[1fr_160px_140px]">
-                        <span className="font-semibold text-slate-800">{item.year} {item.make} {item.model} · {item.transmission ?? item.trim ?? "Option"}</span>
-                        <span className="text-slate-600">{item.fuelType ?? "-"} · {item.drive ?? "-"}</span>
-                        <span className="text-slate-600">MPG {item.mpgCombined ?? "-"}</span>
+                        <span className="font-semibold text-[var(--pos-text)]">{item.year} {item.make} {item.model} · {item.transmission ?? item.trim ?? "Option"}</span>
+                        <span className="text-[var(--pos-muted)]">{item.fuelType ?? "-"} · {item.drive ?? "-"}</span>
+                        <span className="text-[var(--pos-muted)]">MPG {item.mpgCombined ?? "-"}</span>
                       </div>
                     ))}
                   </div>
@@ -1230,10 +1232,10 @@ export function SettingsPage() {
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-950">NHTSA Recall Lookup</h3>
-                <p className="mt-1 text-sm text-slate-500">Optional public recall campaign lookup. Manual NHTSA links are used when live lookup is not enabled.</p>
+                <h3 className="text-xl font-bold text-[var(--pos-text)]">NHTSA Recall Lookup</h3>
+                <p className="mt-1 text-sm text-[var(--pos-muted)]">Optional public recall campaign lookup. Manual NHTSA links are used when live lookup is not enabled.</p>
               </div>
-              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              <label className="flex items-center gap-2 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-3 py-2 text-sm font-semibold text-[var(--pos-text)]">
                 <input type="checkbox" checked={recallEnabled} onChange={(event) => void toggleRecalls(event.target.checked)} />
                 Enable Recall Lookup
               </label>
@@ -1247,7 +1249,7 @@ export function SettingsPage() {
                   <Button className="mt-7" onClick={() => void testRecalls()}>Test Recalls</Button>
                 </div>
                 {recallResult ? (
-                  <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                  <div className="mt-4 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4 text-sm text-[var(--pos-text)]">
                     <strong>{recallResult.message}</strong>
                     {recallResult.externalUrl ? <a className="ml-3 font-bold text-[var(--pos-blue)]" href={recallResult.externalUrl} target="_blank" rel="noreferrer">Open NHTSA</a> : null}
                   </div>
@@ -1258,10 +1260,10 @@ export function SettingsPage() {
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-950">OpenStreetMap / Nominatim</h3>
-                <p className="mt-1 text-sm text-slate-500">Optional manual geocoding for future address validation. It is rate-limited and never runs while typing.</p>
+                <h3 className="text-xl font-bold text-[var(--pos-text)]">OpenStreetMap / Nominatim</h3>
+                <p className="mt-1 text-sm text-[var(--pos-muted)]">Optional manual geocoding for future address validation. It is rate-limited and never runs while typing.</p>
               </div>
-              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              <label className="flex items-center gap-2 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-3 py-2 text-sm font-semibold text-[var(--pos-text)]">
                 <input type="checkbox" checked={geocodingEnabled} onChange={(event) => void toggleGeocoding(event.target.checked)} />
                 Enable Geocoding
               </label>
@@ -1270,17 +1272,17 @@ export function SettingsPage() {
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-bold text-slate-950">{brandConfig.featureLabels.loyaltyName} App Sync</h3>
-                <p className="mt-1 text-sm text-slate-500">Queues completed services, vehicles, punch cards, coupons, referrals, and check-ins for the Firebase customer app. Live Firestore writes stay off until configured.</p>
+                <h3 className="text-xl font-bold text-[var(--pos-text)]">{brandConfig.featureLabels.loyaltyName} App Sync</h3>
+                <p className="mt-1 text-sm text-[var(--pos-muted)]">Queues completed services, vehicles, punch cards, coupons, referrals, and check-ins for the Firebase customer app. Live Firestore writes stay off until configured.</p>
                 <div className="mt-3 flex flex-wrap gap-2 text-sm">
                   <Badge tone={loyaltyStatus?.enabled ? "green" : "slate"}>{loyaltyStatus?.status.replace(/_/g, " ") ?? "Disabled"}</Badge>
-                  <span className="text-slate-600">Provider: Firebase / Firestore</span>
-                  <span className="text-slate-600">Pending: <strong>{loyaltyStats?.pending ?? 0}</strong></span>
-                  <span className="text-slate-600">Failed: <strong>{loyaltyStats?.failed ?? 0}</strong></span>
-                  <span className="text-slate-600">Synced: <strong>{loyaltyStats?.synced ?? 0}</strong></span>
+                  <span className="text-[var(--pos-muted)]">Provider: Firebase / Firestore</span>
+                  <span className="text-[var(--pos-muted)]">Pending: <strong>{loyaltyStats?.pending ?? 0}</strong></span>
+                  <span className="text-[var(--pos-muted)]">Failed: <strong>{loyaltyStats?.failed ?? 0}</strong></span>
+                  <span className="text-[var(--pos-muted)]">Synced: <strong>{loyaltyStats?.synced ?? 0}</strong></span>
                 </div>
                 {loyaltyStats?.lastError ? <div className="mt-2 text-sm text-red-700">Last error: {loyaltyStats.lastError}</div> : null}
-                {loyaltyStats?.lastAttempt ? <div className="mt-1 text-sm text-slate-500">Last sync attempt: {new Date(loyaltyStats.lastAttempt).toLocaleString()}</div> : null}
+                {loyaltyStats?.lastAttempt ? <div className="mt-1 text-sm text-[var(--pos-muted)]">Last sync attempt: {new Date(loyaltyStats.lastAttempt).toLocaleString()}</div> : null}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" disabled={loyaltyBusy} onClick={() => void dryRunLoyaltySync()}>{loyaltyBusy ? "Working..." : "Dry Run Pending Sync"}</Button>
@@ -1288,23 +1290,23 @@ export function SettingsPage() {
               </div>
             </div>
             {loyaltyEvents.length ? (
-              <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+              <div className="mt-4 overflow-hidden rounded-lg border border-[var(--pos-border)]">
                 {loyaltyEvents.map((event) => (
-                  <div key={event.id} className="grid gap-2 border-b border-slate-100 px-3 py-2 text-sm last:border-0 md:grid-cols-[1fr_120px_160px]">
-                    <span className="font-semibold text-slate-800">{event.event_type} · {event.entity_type}</span>
+                  <div key={event.id} className="grid gap-2 border-b border-[var(--pos-border)] px-3 py-2 text-sm last:border-0 md:grid-cols-[1fr_120px_160px]">
+                    <span className="font-semibold text-[var(--pos-text)]">{event.event_type} · {event.entity_type}</span>
                     <Badge tone={event.status === "failed" ? "red" : event.status === "synced" ? "green" : "slate"}>{event.status}</Badge>
-                    <span className="text-slate-500">{new Date(event.updated_at).toLocaleString()}</span>
+                    <span className="text-[var(--pos-muted)]">{new Date(event.updated_at).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
-            ) : <p className="mt-4 text-sm text-slate-500">No loyalty sync events yet. Completed local oil changes will enqueue events here.</p>}
+            ) : <p className="mt-4 text-sm text-[var(--pos-muted)]">No loyalty sync events yet. Completed local oil changes will enqueue events here.</p>}
           </Card>
         </div>
       ) : null}
       {activeTab === "Loyalty Rules" ? (
         <Card className="p-5">
-          <h3 className="text-xl font-bold text-slate-950">Local Loyalty Rules</h3>
-          <p className="mt-1 text-sm text-slate-500">Rules are evaluated locally when tickets are finalized. Customer app sync remains queued until Firebase is configured.</p>
+          <h3 className="text-xl font-bold text-[var(--pos-text)]">Local Loyalty Rules</h3>
+          <p className="mt-1 text-sm text-[var(--pos-muted)]">Rules are evaluated locally when tickets are finalized. Customer app sync remains queued until Firebase is configured.</p>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <Input label="Punches required for free oil change" type="number" value={loyaltyRules.punchesRequired} onChange={(event) => setLoyaltyRules({ ...loyaltyRules, punchesRequired: event.target.value })} />
             <Input label="Referral reward amount" type="number" value={loyaltyRules.referralRewardAmount} onChange={(event) => setLoyaltyRules({ ...loyaltyRules, referralRewardAmount: event.target.value })} />
@@ -1320,8 +1322,8 @@ export function SettingsPage() {
           <Card className="p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="font-bold text-slate-950">Local SQLite Connection</div>
-                <div className="mt-1 text-sm text-slate-500">
+                <div className="font-bold text-[var(--pos-text)]">Local SQLite Connection</div>
+                <div className="mt-1 text-sm text-[var(--pos-muted)]">
                   {bridgeDebug.databaseAvailable
                     ? "Electron SQLite connected."
                     : bridgeDebug.userAgent.includes("Electron")
@@ -1332,17 +1334,17 @@ export function SettingsPage() {
               <Badge tone={bridgeDebug.databaseAvailable ? "green" : "red"}>{bridgeDebug.databaseAvailable ? "Connected" : "Not Connected"}</Badge>
             </div>
             {import.meta.env.DEV ? (
-              <div className="mt-3 rounded-md bg-slate-50 p-3 font-mono text-xs text-slate-500">
+              <div className="mt-3 rounded-md bg-[var(--pos-panel-2)] p-3 font-mono text-xs text-[var(--pos-muted)]">
                 isElectronBridgeDetected={String(bridgeDebug.isElectronBridgeDetected)} · databaseAvailable={String(bridgeDebug.databaseAvailable)} · legacyBridgeDetected={String(bridgeDebug.legacyBridgeDetected)} · userAgent={bridgeDebug.userAgent}
               </div>
             ) : null}
           </Card>
           <div className="grid gap-5 xl:grid-cols-3">
             <Card className="p-5">
-              <h3 className="text-lg font-bold text-slate-950">Import Droptop Orders CSV</h3>
-              <p className="mt-1 text-sm text-slate-500">Imports finalized order history, customers, vehicles, payments, and service history.</p>
+              <h3 className="text-lg font-bold text-[var(--pos-text)]">Import Droptop Orders CSV</h3>
+              <p className="mt-1 text-sm text-[var(--pos-muted)]">Imports finalized order history, customers, vehicles, payments, and service history.</p>
               <input
-                className="mt-4 block w-full rounded-md border border-slate-200 bg-white p-3 text-sm"
+                className="mt-4 block w-full rounded-md border border-[var(--pos-border)] bg-white p-3 text-sm"
                 type="file"
                 accept=".csv,text/csv"
                 onChange={(event) => {
@@ -1359,7 +1361,7 @@ export function SettingsPage() {
                 <Button disabled={!ordersPreview || importing} onClick={runOrdersImport}>{importing ? "Importing..." : "Run Import"}</Button>
               </div>
               {ordersPreview ? (
-                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                <div className="mt-5 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4 text-sm">
                   <div className="grid gap-2 md:grid-cols-2">
                     <div>Total rows: <strong>{ordersPreview.totalRows}</strong></div>
                     <div>New tickets: <strong>{ordersPreview.estimatedNewTickets}</strong></div>
@@ -1367,7 +1369,7 @@ export function SettingsPage() {
                     <div>Estimated customers: <strong>{ordersPreview.estimatedNewCustomers}</strong></div>
                     <div>Estimated vehicles: <strong>{ordersPreview.estimatedNewVehicles}</strong></div>
                   </div>
-                  <div className="mt-4 text-xs text-slate-500">First rows: {ordersPreview.rowsPreview.map((row) => row.values["Order ID"]).filter(Boolean).join(", ") || "None"}</div>
+                  <div className="mt-4 text-xs text-[var(--pos-muted)]">First rows: {ordersPreview.rowsPreview.map((row) => row.values["Order ID"]).filter(Boolean).join(", ") || "None"}</div>
                 </div>
               ) : null}
               {ordersResult ? (
@@ -1378,10 +1380,10 @@ export function SettingsPage() {
             </Card>
 
             <Card className="p-5">
-              <h3 className="text-lg font-bold text-slate-950">Import Droptop Inventory CSV</h3>
-              <p className="mt-1 text-sm text-slate-500">Imports product quantities, pricing, vendors, and oil/filter metadata.</p>
+              <h3 className="text-lg font-bold text-[var(--pos-text)]">Import Droptop Inventory CSV</h3>
+              <p className="mt-1 text-sm text-[var(--pos-muted)]">Imports product quantities, pricing, vendors, and oil/filter metadata.</p>
               <input
-                className="mt-4 block w-full rounded-md border border-slate-200 bg-white p-3 text-sm"
+                className="mt-4 block w-full rounded-md border border-[var(--pos-border)] bg-white p-3 text-sm"
                 type="file"
                 accept=".csv,text/csv"
                 onChange={(event) => {
@@ -1398,13 +1400,13 @@ export function SettingsPage() {
                 <Button disabled={!inventoryPreview || importing} onClick={runInventoryImport}>{importing ? "Importing..." : "Run Import"}</Button>
               </div>
               {inventoryPreview ? (
-                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                <div className="mt-5 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4 text-sm">
                   <div className="grid gap-2 md:grid-cols-2">
                     <div>Total rows: <strong>{inventoryPreview.totalRows}</strong></div>
                     <div>New items: <strong>{inventoryPreview.estimatedNewInventoryItems}</strong></div>
                     <div>Updated items: <strong>{inventoryPreview.estimatedUpdatedInventoryItems}</strong></div>
                   </div>
-                  <div className="mt-4 text-xs text-slate-500">First rows: {inventoryPreview.rowsPreview.map((row) => row.values["Product ID"]).filter(Boolean).join(", ") || "None"}</div>
+                  <div className="mt-4 text-xs text-[var(--pos-muted)]">First rows: {inventoryPreview.rowsPreview.map((row) => row.values["Product ID"]).filter(Boolean).join(", ") || "None"}</div>
                 </div>
               ) : null}
               {inventoryResult ? (
@@ -1415,11 +1417,11 @@ export function SettingsPage() {
             </Card>
 
             <Card className="p-5">
-              <h3 className="text-lg font-bold text-slate-950">Import Droptop Packages CSV</h3>
-              <p className="mt-1 text-sm text-slate-500">Updates package totals, base service amounts, disposal fees, intervals, services, and Flynn's accessibility.</p>
-              <label className="mt-4 block text-xs font-black uppercase tracking-wide text-slate-500">Package profiles pricing CSV</label>
+              <h3 className="text-lg font-bold text-[var(--pos-text)]">Import Droptop Packages CSV</h3>
+              <p className="mt-1 text-sm text-[var(--pos-muted)]">Updates package totals, base service amounts, disposal fees, intervals, services, and Flynn's accessibility.</p>
+              <label className="mt-4 block text-xs font-black uppercase tracking-wide text-[var(--pos-muted)]">Package profiles pricing CSV</label>
               <input
-                className="mt-2 block w-full rounded-md border border-slate-200 bg-white p-3 text-sm"
+                className="mt-2 block w-full rounded-md border border-[var(--pos-border)] bg-white p-3 text-sm"
                 type="file"
                 accept=".csv,text/csv"
                 onChange={(event) => {
@@ -1431,9 +1433,9 @@ export function SettingsPage() {
                   });
                 }}
               />
-              <label className="mt-4 block text-xs font-black uppercase tracking-wide text-slate-500">Accessibility CSV</label>
+              <label className="mt-4 block text-xs font-black uppercase tracking-wide text-[var(--pos-muted)]">Accessibility CSV</label>
               <input
-                className="mt-2 block w-full rounded-md border border-slate-200 bg-white p-3 text-sm"
+                className="mt-2 block w-full rounded-md border border-[var(--pos-border)] bg-white p-3 text-sm"
                 type="file"
                 accept=".csv,text/csv"
                 onChange={(event) => {
@@ -1450,14 +1452,14 @@ export function SettingsPage() {
                 <Button disabled={!packageImportPreview || importing} onClick={runPackagesImport}>{importing ? "Importing..." : "Run Import"}</Button>
               </div>
               {packageImportPreview ? (
-                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                <div className="mt-5 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4 text-sm">
                   <div className="grid gap-2 md:grid-cols-2">
                     <div>Total rows: <strong>{packageImportPreview.totalRows}</strong></div>
                     <div>Accessible to Flynn's: <strong>{packageImportPreview.accessibleRows}</strong></div>
                     <div>New packages: <strong>{packageImportPreview.estimatedNewPackages}</strong></div>
                     <div>Updated packages: <strong>{packageImportPreview.estimatedUpdatedPackages}</strong></div>
                   </div>
-                  <div className="mt-4 text-xs text-slate-500">First rows: {packageImportPreview.rowsPreview.map((row) => row.values.Name).filter(Boolean).join(", ") || "None"}</div>
+                  <div className="mt-4 text-xs text-[var(--pos-muted)]">First rows: {packageImportPreview.rowsPreview.map((row) => row.values.Name).filter(Boolean).join(", ") || "None"}</div>
                 </div>
               ) : null}
               {packageImportResult ? (
@@ -1469,16 +1471,16 @@ export function SettingsPage() {
           </div>
 
           <Card className="p-5">
-            <h3 className="text-lg font-bold text-slate-950">Import History</h3>
+            <h3 className="text-lg font-bold text-[var(--pos-text)]">Import History</h3>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
+                <thead className="text-left text-xs uppercase tracking-wide text-[var(--pos-muted)]">
                   <tr><th className="py-2">File</th><th>Type</th><th>Status</th><th>Imported</th><th>Skipped</th><th>Failed</th><th>Started</th></tr>
                 </thead>
                 <tbody>
                   {importHistory.map((batch) => (
-                    <tr key={batch.id} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => void getImportHistoryEntry(batch.id).then(setSelectedHistory)}>
-                      <td className="py-3 font-semibold text-slate-950">{batch.file_name}</td>
+                    <tr key={batch.id} className="cursor-pointer border-t border-[var(--pos-border)] hover:bg-[var(--pos-panel-2)]" onClick={() => void getImportHistoryEntry(batch.id).then(setSelectedHistory)}>
+                      <td className="py-3 font-semibold text-[var(--pos-text)]">{batch.file_name}</td>
                       <td>{batch.import_type}</td>
                       <td>{batch.status}</td>
                       <td>{batch.rows_imported}</td>
@@ -1491,16 +1493,16 @@ export function SettingsPage() {
               </table>
             </div>
             {selectedHistory ? (
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
-                <div className="font-bold text-slate-950">{selectedHistory.file_name}</div>
-                <pre className="mt-3 max-h-48 overflow-auto rounded bg-white p-3 text-xs text-slate-600">{selectedHistory.summary_json ?? "{}"}</pre>
+              <div className="mt-5 rounded-lg border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4 text-sm">
+                <div className="font-bold text-[var(--pos-text)]">{selectedHistory.file_name}</div>
+                <pre className="mt-3 max-h-48 overflow-auto rounded bg-white p-3 text-xs text-[var(--pos-muted)]">{selectedHistory.summary_json ?? "{}"}</pre>
                 {selectedHistory.errors.length ? (
                   <div className="mt-3 space-y-2">
                     {selectedHistory.errors.slice(0, 10).map((error) => (
                       <div key={error.id} className="rounded border border-red-100 bg-red-50 p-2 text-red-700">Row {error.row_number ?? "-"}: {error.message}</div>
                     ))}
                   </div>
-                ) : <div className="mt-3 text-slate-500">No errors recorded.</div>}
+                ) : <div className="mt-3 text-[var(--pos-muted)]">No errors recorded.</div>}
               </div>
             ) : null}
           </Card>
@@ -1618,22 +1620,22 @@ export function SettingsPage() {
       {activeTab === "Services" ? (
         <div className="space-y-4">
           <Card className="p-5">
-            <h3 className="font-bold text-slate-950">Add Catalog Item</h3>
+            <h3 className="font-bold text-[var(--pos-text)]">Add Catalog Item</h3>
             <div className="mt-4 grid gap-3 md:grid-cols-[1fr_150px_130px_100px_120px_auto]">
               <Input label="Name" value={newCatalogItem.name} onChange={(event) => setNewCatalogItem((current) => ({ ...current, name: event.target.value }))} />
               <Input label="Category" value={newCatalogItem.category} onChange={(event) => setNewCatalogItem((current) => ({ ...current, category: event.target.value }))} />
               <Input label="Base price" type="number" step="0.01" value={newCatalogItem.base_price} onChange={(event) => setNewCatalogItem((current) => ({ ...current, base_price: event.target.value }))} />
-              <label className="mt-7 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={newCatalogItem.is_fee} onChange={(event) => setNewCatalogItem((current) => ({ ...current, is_fee: event.target.checked, is_discount: event.target.checked ? false : current.is_discount }))} /> Fee</label>
-              <label className="mt-7 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={newCatalogItem.is_discount} onChange={(event) => setNewCatalogItem((current) => ({ ...current, is_discount: event.target.checked, is_fee: event.target.checked ? false : current.is_fee }))} /> Discount</label>
+              <label className="mt-7 flex items-center gap-2 text-sm text-[var(--pos-muted)]"><input type="checkbox" checked={newCatalogItem.is_fee} onChange={(event) => setNewCatalogItem((current) => ({ ...current, is_fee: event.target.checked, is_discount: event.target.checked ? false : current.is_discount }))} /> Fee</label>
+              <label className="mt-7 flex items-center gap-2 text-sm text-[var(--pos-muted)]"><input type="checkbox" checked={newCatalogItem.is_discount} onChange={(event) => setNewCatalogItem((current) => ({ ...current, is_discount: event.target.checked, is_fee: event.target.checked ? false : current.is_fee }))} /> Discount</label>
               <Button className="mt-7" onClick={addCatalogItem}>Add</Button>
             </div>
           </Card>
           <Card className="overflow-hidden">
-            <div className="grid min-w-[980px] grid-cols-[1.4fr_140px_110px_160px_90px_90px_90px_90px_90px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+            <div className="grid min-w-[980px] grid-cols-[1.4fr_140px_110px_160px_90px_90px_90px_90px_90px] gap-3 border-b border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-4 py-3 text-xs font-bold uppercase tracking-wide text-[var(--pos-muted)]">
               <span>Name</span><span>Category</span><span>Price</span><span>Description</span><span>Taxable</span><span>Fee</span><span>Discount</span><span>Active</span><span>Save</span>
             </div>
             {catalogItems.map((item, index) => (
-              <div key={item.id} className="grid min-w-[980px] grid-cols-[1.4fr_140px_110px_160px_90px_90px_90px_90px_90px] items-center gap-3 border-b border-slate-100 px-4 py-3 text-sm">
+              <div key={item.id} className="grid min-w-[980px] grid-cols-[1.4fr_140px_110px_160px_90px_90px_90px_90px_90px] items-center gap-3 border-b border-[var(--pos-border)] px-4 py-3 text-sm">
                 <Input value={item.name} onChange={(event) => setCatalogItems((current) => current.map((catalogItem, i) => i === index ? { ...catalogItem, name: event.target.value } : catalogItem))} />
                 <Input value={item.category} onChange={(event) => setCatalogItems((current) => current.map((catalogItem, i) => i === index ? { ...catalogItem, category: event.target.value } : catalogItem))} />
                 <Input type="number" step="0.01" value={item.base_price} onChange={(event) => setCatalogItems((current) => current.map((catalogItem, i) => i === index ? { ...catalogItem, base_price: Number(event.target.value) || 0 } : catalogItem))} />

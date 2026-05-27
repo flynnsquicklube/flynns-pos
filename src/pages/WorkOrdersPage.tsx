@@ -28,7 +28,7 @@ const columnStyles: Record<WorkOrderColumnKey, { accent: string; badge: "blue" |
   open: {
     accent: "border-t-slate-300",
     badge: "slate",
-    header: "bg-slate-50"
+    header: "bg-[var(--pos-panel-2)]"
   },
   inBay: {
     accent: "border-t-[var(--pos-blue)]",

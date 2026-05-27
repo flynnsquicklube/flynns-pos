@@ -125,7 +125,7 @@ export function VehicleInfoLookupModal({ open, context, currentDefaults, onClose
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <Card className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden p-0 shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-[var(--pos-border)] p-5">
           <div>

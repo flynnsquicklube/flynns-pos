@@ -92,18 +92,18 @@ export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
           </div>
           <div className="grid gap-3 p-3 lg:hidden">
             {filtered.map((ticket) => (
-              <button key={ticket.id} onClick={() => onOpenTicket(ticket.id)} className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm">
+              <button key={ticket.id} onClick={() => onOpenTicket(ticket.id)} className="rounded-xl border border-[var(--pos-border)] bg-white p-4 text-left shadow-sm hover:border-[var(--pos-blue)]">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="font-bold text-slate-950">{ticket.customer_first_name} {ticket.customer_last_name}</div>
+                    <div className="font-bold text-[var(--pos-text)]">{ticket.customer_first_name} {ticket.customer_last_name}</div>
                     <div className="mt-1 text-xs font-bold text-[var(--pos-blue)]">Invoice {getDisplayInvoiceNumber(ticket)}</div>
-                    <div className="mt-1 text-sm text-slate-500">{[ticket.vehicle_year, ticket.vehicle_make, ticket.vehicle_model].filter(Boolean).join(" ")}</div>
+                    <div className="mt-1 text-sm text-[var(--pos-muted)]">{[ticket.vehicle_year, ticket.vehicle_make, ticket.vehicle_model].filter(Boolean).join(" ")}</div>
                   </div>
                   <Badge tone={ticket.status === "completed" ? "green" : "slate"}>{ticket.status}</Badge>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm">
-                  <span className="text-slate-500">{ticket.vehicle_plate ?? "No plate"}</span>
-                  <span className="font-bold text-slate-950">{formatMoney(ticket.total)}</span>
+                  <span className="text-[var(--pos-muted)]">{ticket.vehicle_plate ?? "No plate"}</span>
+                  <span className="font-bold text-[var(--pos-text)]">{formatMoney(ticket.total)}</span>
                 </div>
               </button>
             ))}

@@ -123,21 +123,30 @@ export function OverviewPage({ onStartTicket, onOpenBays, onOpenOrders, onOpenIn
         </Card>
       </div>
       <Card className="p-6">
-        <h2 className="text-xl font-black text-[var(--pos-text)]">Daily Checklist</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {["Check bays and supplies", "Review low stock alerts", "Keep waiting payment lane clear"].map((task) => (
-            <div key={task} className="rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-card-hover)] p-4 text-sm font-bold text-[var(--pos-text)]">{task}</div>
-          ))}
-        </div>
-      </Card>
-      <Card className="p-6">
         <h2 className="text-xl font-black text-[var(--pos-text)]">Quick Actions</h2>
-        <div className="mt-4 grid gap-3 md:grid-cols-5">
-          <Button variant="secondary" onClick={onStartTicket}>Start Ticket</Button>
-          <Button variant="secondary" onClick={onOpenWorkOrders}>Work Orders</Button>
-          <Button variant="secondary" onClick={onOpenBays}>Active Bays</Button>
-          <Button variant="secondary" onClick={onOpenPaymentManager}>Payment Manager</Button>
-          <Button variant="secondary" onClick={onOpenBlankOrder}>Blank Order</Button>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+          {[
+            { label: "Start Ticket", description: "New service ticket", color: "bg-[var(--pos-blue)]", onClick: onStartTicket },
+            { label: "Work Orders", description: "Today's board", color: "bg-[var(--pos-blue-2)]", onClick: onOpenWorkOrders },
+            { label: "Active Bays", description: "Bay 1 & Bay 2", color: "bg-[#0E1B33]", onClick: onOpenBays },
+            { label: "Payment Manager", description: "Collect payments", color: "bg-[var(--pos-success)]", onClick: onOpenPaymentManager },
+            { label: "Blank Order", description: "Quote / estimate", color: "bg-[var(--pos-muted)]", onClick: onOpenBlankOrder }
+          ].map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              onClick={action.onClick}
+              className="group flex flex-col gap-3 rounded-[var(--pos-radius-lg)] border border-[var(--pos-border)] bg-[var(--pos-card)] p-4 text-left shadow-[var(--pos-shadow-card)] transition hover:-translate-y-0.5 hover:border-[var(--pos-border-strong)] hover:shadow-[0_18px_40px_rgba(14,27,51,0.12)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--pos-blue-soft)]"
+            >
+              <span className={`flex h-10 w-10 items-center justify-center rounded-[var(--pos-radius-md)] ${action.color}`}>
+                <span className="text-white text-lg font-black leading-none">{action.label[0]}</span>
+              </span>
+              <span>
+                <span className="block text-sm font-black text-[var(--pos-text)]">{action.label}</span>
+                <span className="mt-0.5 block text-xs font-semibold text-[var(--pos-muted)]">{action.description}</span>
+              </span>
+            </button>
+          ))}
         </div>
       </Card>
     </section>

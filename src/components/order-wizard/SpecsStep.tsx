@@ -35,17 +35,17 @@ interface SelectFieldProps {
 
 function SelectField({ label, value, onChange, disabled, required, helperText, children }: SelectFieldProps) {
   return (
-    <label className="text-sm font-semibold text-slate-700">
+    <label className="text-sm font-semibold text-[var(--pos-text)]">
       {label}{required ? <span className="text-red-600"> *</span> : null}
       <select
-        className="mt-2 h-12 w-full rounded-xl border border-[var(--brand-border)] bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm outline-none transition focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+        className="mt-2 h-12 w-full rounded-xl border border-[var(--brand-border)] bg-white px-3 text-sm font-semibold text-[var(--pos-text)] shadow-sm outline-none transition focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-[var(--pos-panel-2)] disabled:text-[var(--pos-muted)]"
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       >
         {children}
       </select>
-      {helperText ? <div className="mt-1 text-xs font-medium text-slate-500">{helperText}</div> : null}
+      {helperText ? <div className="mt-1 text-xs font-medium text-[var(--pos-muted)]">{helperText}</div> : null}
     </label>
   );
 }
@@ -248,8 +248,8 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
   return (
     <div className="flex justify-center">
       <Card className="w-full max-w-4xl p-8">
-        <h1 className="text-2xl font-bold text-slate-950">Vehicle Specs</h1>
-        <p className="mt-1 text-sm text-slate-500">Confirm or enter the vehicle information for this service order.</p>
+        <h1 className="text-2xl font-bold text-[var(--pos-text)]">Vehicle Specs</h1>
+        <p className="mt-1 text-sm text-[var(--pos-muted)]">Confirm or enter the vehicle information for this service order.</p>
         {topValidation ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{topValidation}</div> : null}
         {decodedBy ? (
           <div className="mt-4 inline-flex rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-black text-[var(--pos-blue)]">
@@ -266,10 +266,10 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-black uppercase tracking-wide text-[var(--pos-blue)]">Existing vehicle match</div>
-                <div className="mt-1 text-lg font-black text-slate-950">
+                <div className="mt-1 text-lg font-black text-[var(--pos-text)]">
                   {[matchedVehicle.year, matchedVehicle.make, matchedVehicle.model].filter(Boolean).join(" ") || "Saved vehicle"}
                 </div>
-                <div className="mt-2 grid gap-1 text-sm font-semibold text-slate-600 sm:grid-cols-2">
+                <div className="mt-2 grid gap-1 text-sm font-semibold text-[var(--pos-muted)] sm:grid-cols-2">
                   <span>Customer: {matchedCustomer ? `${matchedCustomer.first_name} ${matchedCustomer.last_name}` : "No linked customer"}</span>
                   <span>Last mileage: {matchedVehicle.mileage?.toLocaleString() ?? "Not recorded"}</span>
                   <span>VIN: {matchedVehicle.vin ?? "Not recorded"}</span>
@@ -284,22 +284,22 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
         {onLookupVehicleInfo && (specs.vin || specs.year || specs.make || specs.model) ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--brand-border)] bg-white p-4">
             <div>
-              <div className="font-bold text-slate-950">Need oil capacity or filter info?</div>
-              <div className="text-sm text-slate-500">Use local service history first, then optional verified search links.</div>
+              <div className="font-bold text-[var(--pos-text)]">Need oil capacity or filter info?</div>
+              <div className="text-sm text-[var(--pos-muted)]">Use local service history first, then optional verified search links.</div>
             </div>
             <Button variant="secondary" onClick={onLookupVehicleInfo}>Lookup Vehicle Info</Button>
           </div>
         ) : null}
         <div className="mt-6 grid gap-5">
-          <div className="rounded-xl border border-[var(--brand-border)] bg-slate-50 p-4">
+          <div className="rounded-xl border border-[var(--brand-border)] bg-[var(--pos-panel-2)] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-slate-950">Vehicle Details</h2>
-                <p className="mt-1 text-sm font-medium text-slate-500">Choose real catalog values when available. Manual override keeps the shop moving offline.</p>
+                <h2 className="text-base font-bold text-[var(--pos-text)]">Vehicle Details</h2>
+                <p className="mt-1 text-sm font-medium text-[var(--pos-muted)]">Choose real catalog values when available. Manual override keeps the shop moving offline.</p>
               </div>
               <button
                 type="button"
-                className={`rounded-full border px-4 py-2 text-xs font-black uppercase transition ${manualOverride ? "border-blue-200 bg-blue-50 text-[var(--pos-blue)]" : "border-[var(--brand-border)] bg-white text-slate-600 hover:border-blue-200"}`}
+                className={`rounded-full border px-4 py-2 text-xs font-black uppercase transition ${manualOverride ? "border-blue-200 bg-blue-50 text-[var(--pos-blue)]" : "border-[var(--brand-border)] bg-white text-[var(--pos-muted)] hover:border-blue-200"}`}
                 onClick={() => setManualOverride((current) => !current)}
               >
                 Manual override
@@ -360,8 +360,8 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
             ["Identification", identificationFields],
             ["Service Defaults", serviceFields]
           ].map(([title, fields]) => (
-            <div key={title as string} className="rounded-xl border border-[var(--brand-border)] bg-slate-50 p-4">
-              <h2 className="text-base font-bold text-slate-950">{title as string}</h2>
+            <div key={title as string} className="rounded-xl border border-[var(--brand-border)] bg-[var(--pos-panel-2)] p-4">
+              <h2 className="text-base font-bold text-[var(--pos-text)]">{title as string}</h2>
               {title === "Identification" && showIdentifierError ? (
                 <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
                   {identifierValidation.reason ?? "Enter either a VIN or license plate before continuing."}
