@@ -3,6 +3,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
 import { validateVehicleIdentifier } from "../../lib/domain/startTicket/startTicketValidation";
+import { US_STATES } from "../../lib/domain/vehicles/usStates";
 import { getOptionDetails, listMakesForYear, listModelsForYearMake, listOptionsForYearMakeModel, listYears } from "../../lib/integrations/vehicleCatalog/vehicleCatalog.service";
 import type { Customer } from "../../types/customer";
 import type { Vehicle } from "../../types/vehicle";
@@ -369,18 +370,32 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
               ) : null}
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 {(fields as typeof identificationFields).map((field) => (
-                  <Input
-                    key={field.key}
-                    inputSize="touch"
-                    label={field.label}
-                    required={field.required}
-                    placeholder={field.key === "mileage" ? "Enter current mileage" : field.placeholder ?? field.label}
-                    type={field.type}
-                    value={specs[field.key]}
-                    onChange={(event) => update(field.key, field.key === "plate" || field.key === "plate_state" ? event.target.value.toUpperCase() : event.target.value)}
-                    helperText={field.key === "mileage" && matchedVehicle?.mileage ? `Last recorded: ${matchedVehicle.mileage.toLocaleString()} mi` : undefined}
-                    errorText={title === "Identification" ? identificationFieldError(field.key) : undefined}
-                  />
+                  field.key === "plate_state" ? (
+                    <div key={field.key}>
+                      <SelectField
+                        label={field.label}
+                        required={field.required}
+                        value={specs.plate_state}
+                        onChange={(value) => update("plate_state", value)}
+                      >
+                        {US_STATES.map((state) => <option key={state.code} value={state.code}>{state.code} - {state.name}</option>)}
+                      </SelectField>
+                      {title === "Identification" && identificationFieldError(field.key) ? <div className="mt-1 text-xs font-bold text-red-600">{identificationFieldError(field.key)}</div> : null}
+                    </div>
+                  ) : (
+                    <Input
+                      key={field.key}
+                      inputSize="touch"
+                      label={field.label}
+                      required={field.required}
+                      placeholder={field.key === "mileage" ? "Enter current mileage" : field.placeholder ?? field.label}
+                      type={field.type}
+                      value={specs[field.key]}
+                      onChange={(event) => update(field.key, field.key === "plate" ? event.target.value.toUpperCase() : event.target.value)}
+                      helperText={field.key === "mileage" && matchedVehicle?.mileage ? `Last recorded: ${matchedVehicle.mileage.toLocaleString()} mi` : undefined}
+                      errorText={title === "Identification" ? identificationFieldError(field.key) : undefined}
+                    />
+                  )
                 ))}
               </div>
             </div>

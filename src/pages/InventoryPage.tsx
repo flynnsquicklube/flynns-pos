@@ -1,4 +1,4 @@
-import { Eye, PackagePlus, Pencil, Search, SlidersHorizontal, X } from "lucide-react";
+import { Camera, Eye, PackagePlus, Pencil, ScanLine, Search, SlidersHorizontal, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -54,6 +54,7 @@ import {
 import { getInventoryPermissionSet, type InventoryPermissionSet } from "../lib/security/inventoryPermissions";
 import { formatMoney } from "../lib/utils/money";
 import type { InventoryItem } from "../types/inventory";
+import { InventoryBarcodeScannerModal } from "../components/scanner/InventoryBarcodeScannerModal";
 
 const movementReasons = ["Received stock", "Manual correction", "Damaged", "Return", "Inventory count", "Other"];
 type InventoryTool = "browse" | "countSheets" | "purchaseOrders" | "scanner" | "suppliers";
@@ -287,15 +288,21 @@ function InventoryEditModal({
   item,
   onClose,
   onSave,
-  canViewFinancials
+  canViewFinancials,
+  prefillBarcode
 }: {
   item: InventoryItem | null;
   onClose: () => void;
   onSave: (input: InventoryInput, item: InventoryItem | null) => Promise<void>;
   canViewFinancials: boolean;
+  prefillBarcode?: string | null;
 }) {
-  const [form, setForm] = useState<InventoryFormState>(() => item ? formFromItem(item) : emptyForm);
+  const [form, setForm] = useState<InventoryFormState>(() => {
+    const base = item ? formFromItem(item) : emptyForm;
+    return prefillBarcode ? { ...base, barcode: prefillBarcode } : base;
+  });
   const [saving, setSaving] = useState(false);
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
   const update = (patch: Partial<InventoryFormState>) => setForm((current) => ({ ...current, ...patch }));
 
   const save = async () => {
@@ -309,12 +316,29 @@ function InventoryEditModal({
 
   return (
     <ModalShell title={item ? "Edit Inventory Item" : "Add Inventory Item"} onClose={onClose}>
+      {barcodeScannerOpen ? (
+        <InventoryBarcodeScannerModal
+          title="Scan Item Barcode"
+          onClose={() => setBarcodeScannerOpen(false)}
+          onBarcodeScanned={(barcode) => { update({ barcode }); setBarcodeScannerOpen(false); }}
+        />
+      ) : null}
       <div className="space-y-4">
         <FormSection title="Identity">
           <Input label="Product ID / SKU" inputSize="touch" value={form.product_id} onChange={(event) => update({ product_id: event.target.value, sku: event.target.value })} />
           <Input label="Product Type / Name" inputSize="touch" value={form.name} onChange={(event) => update({ name: event.target.value, product_type: event.target.value })} />
           <Input label="Inventory Type / Category" inputSize="touch" value={form.category} onChange={(event) => update({ category: event.target.value, inventory_type: event.target.value })} />
-          <Input label="UPC / Barcode" inputSize="touch" value={form.barcode} onChange={(event) => update({ barcode: event.target.value })} />
+          <div className="relative">
+            <Input label="UPC / Barcode" inputSize="touch" value={form.barcode} onChange={(event) => update({ barcode: event.target.value })} className="pr-14" />
+            <button
+              type="button"
+              title="Scan barcode with camera"
+              onClick={() => setBarcodeScannerOpen(true)}
+              className="absolute right-2 bottom-2 flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition"
+            >
+              <Camera size={18} />
+            </button>
+          </div>
           <Input label="Brand" inputSize="touch" value={form.brand} onChange={(event) => update({ brand: event.target.value })} />
           <Input label="Supplier / Vendor" inputSize="touch" value={form.vendor} onChange={(event) => update({ vendor: event.target.value, supplier: event.target.value })} />
           <Input label="Sequence ID" inputSize="touch" value={form.sequence_id} onChange={(event) => update({ sequence_id: event.target.value })} />
@@ -775,11 +799,12 @@ function PurchaseOrdersPanel() {
   );
 }
 
-function ScannerPanel({ onView, onEdit, onAdjust, canEdit, canAdjust }: { onView: (item: InventoryItem) => void; onEdit: (item: InventoryItem | "new") => void; onAdjust: (item: InventoryItem) => void; canEdit: boolean; canAdjust: boolean }) {
+function ScannerPanel({ onView, onEdit, onAdjust, onEditWithBarcode, canEdit, canAdjust }: { onView: (item: InventoryItem) => void; onEdit: (item: InventoryItem | "new") => void; onAdjust: (item: InventoryItem) => void; onEditWithBarcode: (barcode: string) => void; canEdit: boolean; canAdjust: boolean }) {
   const [scan, setScan] = useState("");
+  const [cameraScannerOpen, setCameraScannerOpen] = useState(false);
   const [result, setResult] = useState<InventoryItem | null>(null);
   const [searched, setSearched] = useState(false);
-  const classify = scan.trim().length === 17 ? "Possible VIN" : /^\d{8,14}$/.test(scan.trim()) ? "UPC / Barcode" : "Product ID / SKU";
+  const classify = scan.trim().length === 17 ? "Possible VIN" : /^\d{8,14}$/.test(scan.trim()) ? "UPC / Barcode" : scan.trim() ? "Product ID / SKU" : null;
   const runScan = async () => {
     const value = scan.trim();
     if (!value) return;
@@ -789,22 +814,45 @@ function ScannerPanel({ onView, onEdit, onAdjust, canEdit, canAdjust }: { onView
   };
   return (
     <Card className="p-5">
-      <h2 className="text-xl font-black text-[var(--pos-text)]">Scanner</h2>
-      <p className="mt-1 text-sm text-[var(--pos-muted)]">Keyboard-wedge scanner mode. No special driver required.</p>
+      {cameraScannerOpen ? (
+        <InventoryBarcodeScannerModal
+          title="Scan Inventory Barcode"
+          onClose={() => setCameraScannerOpen(false)}
+          onBarcodeScanned={(barcode) => { setCameraScannerOpen(false); setScan(barcode); setSearched(false); setResult(null); }}
+        />
+      ) : null}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black text-[var(--pos-text)]">Scanner</h2>
+          <p className="mt-1 text-sm text-[var(--pos-muted)]">Keyboard-wedge or camera barcode lookup.</p>
+        </div>
+        <Button variant="secondary" icon={<ScanLine size={16} />} onClick={() => setCameraScannerOpen(true)}>Camera Scan</Button>
+      </div>
       <div className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
         <Input inputSize="touch" value={scan} autoFocus onChange={(event) => setScan(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void runScan(); }} placeholder="Scan barcode, product ID, or VIN..." />
         <Button size="touch" onClick={runScan}>Lookup</Button>
       </div>
-      <div className="mt-3 text-sm text-[var(--pos-muted)]">Detected input: {classify}</div>
+      {classify ? <div className="mt-3 text-sm text-[var(--pos-muted)]">Detected: <span className="font-semibold text-[var(--pos-text)]">{classify}</span></div> : null}
       {result ? (
         <Card className="mt-5 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div><div className="text-xl font-black text-[var(--pos-text)]">{result.product_id ?? result.sku}</div><div className="text-sm text-[var(--pos-muted)]">{result.name} · Qty {result.quantity_on_hand}</div></div>
+            <div><div className="text-xl font-black text-[var(--pos-text)]">{result.product_id ?? result.sku}</div><div className="text-sm text-[var(--pos-muted)]">{result.name} · Qty {result.quantity_on_hand}{result.barcode ? ` · ${result.barcode}` : ""}</div></div>
             <div className="flex gap-2"><Button variant="secondary" onClick={() => onView(result)}>View Item</Button><Button disabled={!canAdjust} onClick={() => onAdjust(result)}>Adjust Qty</Button><Button disabled={!canEdit} onClick={() => onEdit(result)}>Edit</Button></div>
           </div>
         </Card>
       ) : searched ? (
-        <EmptyState title="No item found" message="Add a new inventory item if this barcode or product ID should be stocked." action={<Button disabled={!canEdit} onClick={() => onEdit("new")}>Add New Inventory Item</Button>} />
+        <div className="mt-5 rounded-2xl border border-dashed border-[var(--pos-border)] bg-[var(--pos-card)] p-6 text-center">
+          <div className="text-base font-black text-[var(--pos-text)]">No item found</div>
+          <div className="mt-1 text-sm text-[var(--pos-muted)]">This barcode or product ID is not in inventory yet.</div>
+          {canEdit ? (
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <Button icon={<PackagePlus size={16} />} onClick={() => { if (/^\d{8,14}$/.test(scan.trim()) || scan.trim()) onEditWithBarcode(scan.trim()); else onEdit("new"); }}>
+                Add Item{/^\d{8,14}$/.test(scan.trim()) ? ` with Barcode ${scan.trim()}` : ""}
+              </Button>
+              <Button variant="secondary" onClick={() => onEdit("new")}>Add Item (blank)</Button>
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </Card>
   );
@@ -881,6 +929,7 @@ export function InventoryPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [editingItem, setEditingItem] = useState<InventoryItem | null | "new">(null);
+  const [prefillBarcode, setPrefillBarcode] = useState<string | null>(null);
   const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
   const [detailsItem, setDetailsItem] = useState<InventoryItem | null>(null);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
@@ -978,7 +1027,7 @@ export function InventoryPage() {
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Inventory" subtitle="Search parts, oil, filters, and pricing." />
+      <PageHeader theme="emerald" title="Inventory" subtitle="Search parts, oil, filters, and pricing." />
       <ToolTabs active={activeTool} permissions={permissions} onChange={setActiveTool} />
       {showBrowse ? <Card className="p-5">
         <div className="relative">
@@ -1047,10 +1096,10 @@ export function InventoryPage() {
               })}
             </div>
             <div className="hidden overflow-auto md:block">
-              <table className="w-full min-w-[760px] border-collapse text-sm">
+              <table className="w-full min-w-[860px] border-collapse text-sm">
               <thead className="sticky top-0 bg-[var(--pos-panel-2)] text-left text-xs uppercase tracking-wide text-[var(--pos-muted)]">
                 <tr>
-                  {["Product ID / SKU", "Item", "Stock", "Retail", "Actions"].map((heading) => (
+                  {["Product / SKU", "Name & Category", "Barcode", "Stock", "Retail", ""].map((heading) => (
                     <th key={heading} className="border-b border-[var(--pos-border)] px-4 py-3 font-semibold">{heading}</th>
                   ))}
                 </tr>
@@ -1060,17 +1109,24 @@ export function InventoryPage() {
                   const isLow = lowStock(item);
                   return (
                     <tr key={item.id} className="bg-[var(--pos-card)] hover:bg-[var(--pos-card-hover)]">
-                      <td className="border-b border-[var(--pos-border)] px-4 py-3 font-semibold text-[var(--pos-text)]">
-                        <div>{itemLabel(item)}</div>
-                        <div className="mt-1 flex gap-1">{item.is_imported ? <Badge tone="blue">Imported</Badge> : null}{isLow ? <Badge tone="red">Low</Badge> : null}</div>
+                      <td className="border-b border-[var(--pos-border)] px-4 py-3">
+                        <div className="font-semibold text-[var(--pos-text)]">{itemLabel(item)}</div>
+                        <div className="mt-1 flex flex-wrap gap-1">{item.is_imported ? <Badge tone="blue">Imported</Badge> : null}{isLow ? <Badge tone="red">Low</Badge> : null}</div>
                       </td>
                       <td className="border-b border-[var(--pos-border)] px-4 py-3">
                         <div className="font-semibold text-[var(--pos-text)]">{item.product_type ?? item.name}</div>
-                        <div className="text-xs text-[var(--pos-muted)]">{[item.brand ?? item.vendor, itemCategory(item), item.viscosity, item.oil_formulation].filter(Boolean).join(" · ")}</div>
+                        <div className="text-xs text-[var(--pos-muted)]">{[item.brand ?? item.vendor, itemCategory(item), item.viscosity].filter(Boolean).join(" · ")}</div>
+                      </td>
+                      <td className="border-b border-[var(--pos-border)] px-4 py-3">
+                        {item.barcode ? (
+                          <div className="font-mono text-xs text-[var(--pos-text)]">{item.barcode}</div>
+                        ) : (
+                          <div className="text-xs text-[var(--pos-muted)]">—</div>
+                        )}
                       </td>
                       <td className="border-b border-[var(--pos-border)] px-4 py-3">
                         <div className="font-black text-[var(--pos-text)]">{item.quantity_on_hand}</div>
-                        {isLow ? <div className="mt-1"><Badge tone="red">Low Stock</Badge></div> : null}
+                        {isLow ? <div className="mt-1"><Badge tone="red">Low</Badge></div> : null}
                       </td>
                       <td className="border-b border-[var(--pos-border)] px-4 py-3 font-bold text-[var(--pos-text)]">
                         {formatMoney(item.retail_price)}
@@ -1098,14 +1154,15 @@ export function InventoryPage() {
       </Card> : null}
       {activeTool === "countSheets" ? <CountSheetsPanel canAdjust={permissions.canAdjust} /> : null}
       {activeTool === "purchaseOrders" ? <PurchaseOrdersPanel /> : null}
-      {activeTool === "scanner" ? <ScannerPanel canEdit={permissions.canEdit} canAdjust={permissions.canAdjust} onView={setDetailsItem} onEdit={setEditingItem} onAdjust={setAdjustingItem} /> : null}
+      {activeTool === "scanner" ? <ScannerPanel canEdit={permissions.canEdit} canAdjust={permissions.canAdjust} onView={setDetailsItem} onEdit={setEditingItem} onAdjust={setAdjustingItem} onEditWithBarcode={(barcode) => { setPrefillBarcode(barcode); setEditingItem("new"); }} /> : null}
       {activeTool === "suppliers" ? <SuppliersPanel /> : null}
       {editingItem ? (
         <InventoryEditModal
           item={editingItem === "new" ? null : editingItem}
-          onClose={() => setEditingItem(null)}
+          onClose={() => { setEditingItem(null); setPrefillBarcode(null); }}
           onSave={saveInventory}
           canViewFinancials={permissions.canViewFinancials}
+          prefillBarcode={editingItem === "new" ? prefillBarcode : null}
         />
       ) : null}
       {adjustingItem ? (

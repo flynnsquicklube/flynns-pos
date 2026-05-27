@@ -24,7 +24,7 @@ import { getSetting } from "../../lib/db/repositories/settingsRepo";
 import { createTicketWithItems, listActiveTickets, startService } from "../../lib/db/repositories/ticketsRepo";
 import { createWindowSticker, updateWindowStickerStatus } from "../../lib/db/repositories/windowStickersRepo";
 import { createWindowStickerPrintJob, markPrintJobPreviewed, markPrintJobPrinted } from "../../lib/printing/printJobService";
-import { applyVehicleDecode, createVehicle, findVehicleByPlate, findVehicleByVin, findVehicleByVinOrPlate, getVehicleById, searchVehicles, updateVehicle } from "../../lib/db/repositories/vehiclesRepo";
+import { applyVehicleDecode, createVehicle, findVehicleByPlate, findVehicleByVin, findVehicleByVinOrPlate, findVehiclesByPlatePartial, getVehicleById, searchVehicles, updateVehicle, type VehicleSearchResult } from "../../lib/db/repositories/vehiclesRepo";
 import { searchOilFilters } from "../../lib/db/repositories/inventoryRepo";
 import { buildWindowStickerData, type WindowStickerPrintData } from "../../lib/domain/stickers/windowStickerBuilder";
 import { getVehicleOilChangeDefaults } from "../../lib/domain/vehicles/vehicleServiceDefaults";
@@ -232,6 +232,8 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
   const [vehicleInfoLookupOpen, setVehicleInfoLookupOpen] = useState(false);
   const [plateLookupSearching, setPlateLookupSearching] = useState(false);
   const [plateLookupSearched, setPlateLookupSearched] = useState(false);
+  const [plateMatches, setPlateMatches] = useState<VehicleSearchResult[]>([]);
+  const [platePartialSearching, setPlatePartialSearching] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const draftSaveInFlightRef = useRef(false);
@@ -459,11 +461,14 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
             return { ...current, selectedStartingPoint: "manual", customerFirstFlow: false, step: "specs", validation: null };
           }
           if (vehicle) {
-            const specs = specsFromVehicle(vehicle);
+            const specs = { ...specsFromVehicle(vehicle), mileage: "" };
+            const routeToMileage = context.source === "customer_detail" || context.source === "vehicle_detail";
             const hasRequiredSpecs = Boolean(specs.year && specs.make && specs.model && specs.mileage);
             return {
               ...current,
-              selectedStartingPoint: "vehicle",
+              selectedStartingPoint: routeToMileage ? "customer" : "vehicle",
+              customerFirstFlow: routeToMileage ? true : current.customerFirstFlow,
+              activePopout: routeToMileage ? "mileageEntry" : current.activePopout,
               lookedUpVehicle: vehicle,
               selectedVehicleId: vehicle.id,
               selectedCustomer: customer,
@@ -473,7 +478,7 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
               plateInput: vehicle.plate ?? current.plateInput,
               plateState: vehicle.plate_state ?? current.plateState,
               specs,
-              step: hasRequiredSpecs && customer ? "servicing" : hasRequiredSpecs ? "customer" : "specs",
+              step: routeToMileage ? "customer" : hasRequiredSpecs && customer ? "servicing" : hasRequiredSpecs ? "customer" : "specs",
               validation: null
             };
           }
@@ -588,10 +593,35 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
     return () => window.clearTimeout(timer);
   }, [filterSearchOpen, filterSearchQuery, notify]);
 
+  useEffect(() => {
+    if (state.step !== "vehicle" || state.vehicleSubstep !== "plate") {
+      setPlateMatches([]);
+      setPlatePartialSearching(false);
+      return;
+    }
+    const plate = normalizePlate(state.plateInput);
+    const plateState = normalizePlateState(state.plateState);
+    if (plate.length < 1) {
+      setPlateMatches([]);
+      setPlatePartialSearching(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setPlatePartialSearching(true);
+      findVehiclesByPlatePartial(plate, plateState, 8)
+        .then(setPlateMatches)
+        .catch(() => setPlateMatches([]))
+        .finally(() => setPlatePartialSearching(false));
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [state.plateInput, state.plateState, state.step, state.vehicleSubstep]);
+
   const goToStep = (step: WizardStep) => setState((current) => ({ ...current, step, validation: null }));
   const isAddingVehicleForSelectedCustomer = Boolean(state.customerFirstFlow && state.selectedCustomer && (state.activePopout === "addVehicle" || state.activePopout === "vinLookup" || state.activePopout === "plateLookup" || state.activePopout === "manualVehicle"));
   const returnToAddVehicleMethod = () => {
     setPlateLookupSearched(false);
+    setPlateMatches([]);
+    setPlatePartialSearching(false);
     setState((current) => ({
       ...current,
       activePopout: "addVehicle",
@@ -600,6 +630,25 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
       vehicleMethod: null,
       validation: null
     }));
+  };
+
+  const backWithinWorkflow = () => {
+    if (state.vehicleSubstep === "plate" || state.vehicleMethod === "plate") {
+      setPlateLookupSearched(false);
+      setPlateMatches([]);
+      setPlatePartialSearching(false);
+    }
+    setState((current) => {
+      if (current.step === "specs") {
+        if (current.vehicleMethod === "vin") {
+          return { ...current, activePopout: null, step: "vehicle", vehicleSubstep: "vin", validation: null };
+        }
+        if (current.vehicleMethod === "plate") {
+          return { ...current, activePopout: null, step: "vehicle", vehicleSubstep: "plate", validation: null };
+        }
+      }
+      return { ...current, activePopout: null, step: "vehicle", vehicleSubstep: "method", validation: null };
+    });
   };
   const startAddVehicleVin = () => {
     setVinDecodeMessage(null);
@@ -619,6 +668,8 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
   };
   const startAddVehiclePlate = () => {
     setPlateLookupSearched(false);
+    setPlateMatches([]);
+    setPlatePartialSearching(false);
     setState((current) => ({
       ...current,
       activePopout: "plateLookup",
@@ -717,6 +768,8 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
       try {
         const result = await lookupPlateLocalFirst({ plate, state: plateState, country: "US", source: "start_ticket" });
         match = result.status === "found" && result.raw ? result.raw as Vehicle : await findVehicleByPlate(plate, plateState);
+        const partialMatches = await findVehiclesByPlatePartial(plate, plateState, 8);
+        setPlateMatches(match ? partialMatches.filter((vehicle) => vehicle.id !== match?.id) : partialMatches);
       } finally {
         setPlateLookupSearching(false);
         setPlateLookupSearched(true);
@@ -842,28 +895,33 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
     }
   };
 
-  const useExistingPlateVehicle = (mileage: string) => {
-    if (!state.lookedUpVehicle) return;
+  const handleExistingPlateVehicle = async (vehicle: Vehicle, mileage: string) => {
     const currentMileage = Number(mileage);
     if (!Number.isFinite(currentMileage) || currentMileage <= 0) {
       setState((current) => ({ ...current, validation: "Enter current mileage before using this vehicle." }));
       notify({ tone: "error", title: "Mileage needed", message: "Enter current mileage before using this vehicle." });
       return;
     }
-    const specs = specsFromVehicle({ ...state.lookedUpVehicle, mileage: currentMileage });
+    const linkedCustomer = vehicle.customer_id ? await getCustomer(vehicle.customer_id) : null;
+    const specs = specsFromVehicle({ ...vehicle, mileage: currentMileage });
     setState((current) => ({
       ...current,
+      lookedUpVehicle: vehicle,
+      selectedVehicleId: vehicle.id,
+      selectedCustomer: linkedCustomer ?? (current.customerFirstFlow ? current.selectedCustomer : null),
+      selectedCustomerId: linkedCustomer?.id ?? (current.customerFirstFlow ? current.selectedCustomerId : null),
+      customerForm: linkedCustomer ? emptyCustomerForm : current.customerForm,
       specs,
       vinInput: specs.vin || current.vinInput,
       plateInput: specs.plate || current.plateInput,
       plateState: specs.plate_state || current.plateState,
       step: specs.year && specs.make && specs.model
-        ? (current.selectedCustomer || current.selectedCustomerId ? "servicing" : "customer")
+        ? (linkedCustomer || current.selectedCustomer || current.selectedCustomerId ? "servicing" : "customer")
         : "specs",
       activePopout: specs.year && specs.make && specs.model
-        ? (current.selectedCustomer || current.selectedCustomerId ? null : "customerSearch")
+        ? (linkedCustomer || current.selectedCustomer || current.selectedCustomerId ? null : "customerSearch")
         : "manualVehicle",
-      validation: current.selectedCustomer || current.selectedCustomerId ? null : "Existing vehicle has no linked customer. Select or add the customer before servicing."
+      validation: linkedCustomer || current.selectedCustomer || current.selectedCustomerId ? null : "Existing vehicle has no linked customer. Select or add the customer before servicing."
     }));
   };
 
@@ -1539,7 +1597,7 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
         />
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "vin" ? (
-        <StartTicketPopout title="VIN Lookup" subtitle="Scan, type, or decode a VIN while manual entry remains available." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout} onClose={closeStartTicketPopout}>
+        <StartTicketPopout title="VIN Lookup" subtitle="Scan, type, or decode a VIN while manual entry remains available." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : backWithinWorkflow} onClose={closeStartTicketPopout}>
           <VinLookupStep
             vin={state.vinInput}
             validation={state.validation}
@@ -1548,7 +1606,7 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
             decodedVehicle={lastVinDecode}
             decoding={decodingVin}
             onChange={(vinInput) => setState((current) => ({ ...current, vinInput, specs: { ...current.specs, vin: vinInput } }))}
-            onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout}
+            onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : backWithinWorkflow}
             showInlineBack={false}
             onSearch={() => void applyVehicleLookup(state.vinInput, "No local VIN match found. Continue with manual specs.")}
             onScannedVin={(vinInput) => void handleScannedVin(vinInput)}
@@ -1565,7 +1623,7 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
         </StartTicketPopout>
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "plate" ? (
-        <StartTicketPopout title="License Plate Lookup" subtitle="Search local vehicles by plate and state." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout} onClose={closeStartTicketPopout}>
+        <StartTicketPopout title="License Plate Lookup" subtitle="Search local vehicles by plate and state." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : backWithinWorkflow} onClose={closeStartTicketPopout}>
           <PlateLookupStep
             plate={state.plateInput}
             plateState={state.plateState}
@@ -1574,24 +1632,38 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
             searched={plateLookupSearched}
             matchedVehicle={state.lookedUpVehicle}
             matchedCustomer={state.selectedCustomer}
+            plateMatches={plateMatches}
+            partialSearching={platePartialSearching}
             onPlateChange={(plateInput) => {
               setPlateLookupSearched(false);
+              setPlateMatches([]);
+              setPlatePartialSearching(false);
               setState((current) => ({ ...current, plateInput: normalizePlate(plateInput), lookedUpVehicle: null, selectedVehicleId: null, specs: { ...current.specs, plate: normalizePlate(plateInput) } }));
             }}
             onStateChange={(plateState) => {
               setPlateLookupSearched(false);
+              setPlateMatches([]);
+              setPlatePartialSearching(false);
               setState((current) => ({ ...current, plateState: normalizePlateState(plateState), lookedUpVehicle: null, selectedVehicleId: null, specs: { ...current.specs, plate_state: normalizePlateState(plateState) } }));
             }}
-            onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout}
+            onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : backWithinWorkflow}
             showInlineBack={false}
             onSearch={() => void applyVehicleLookup(state.plateInput, `No local vehicle found for ${normalizePlate(state.plateInput)} ${normalizePlateState(state.plateState)}.`)}
-            onUseExistingVehicle={useExistingPlateVehicle}
+            onPreviewVehicle={(vehicle) => {
+              setState((current) => ({
+                ...current,
+                lookedUpVehicle: vehicle,
+                selectedVehicleId: vehicle.id,
+                validation: null
+              }));
+            }}
+            onUseExistingVehicle={(vehicle, mileage) => void handleExistingPlateVehicle(vehicle, mileage)}
             onContinue={continueWithNewPlateVehicle}
           />
         </StartTicketPopout>
       ) : null}
       {state.step === "specs" ? (
-        <StartTicketPopout title={state.lookedUpVehicle ? "Confirm Vehicle Specs" : isAddingVehicleForSelectedCustomer ? "Save Vehicle" : "Manual Vehicle Entry"} subtitle="Confirm the vehicle, identifier, and current mileage before service selection." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+        <StartTicketPopout title={state.lookedUpVehicle ? "Confirm Vehicle Specs" : isAddingVehicleForSelectedCustomer ? "Save Vehicle" : "Manual Vehicle Entry"} subtitle="Confirm the vehicle, identifier, and current mileage before service selection." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : backWithinWorkflow} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
           <SpecsStep
             specs={state.specs}
             validation={state.validation}
@@ -1601,7 +1673,7 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
             nextLabel={isAddingVehicleForSelectedCustomer ? "Save Vehicle" : "Next"}
             showPreviousButton={false}
             onChange={(specs) => setState((current) => ({ ...current, specs }))}
-            onPrevious={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout}
+            onPrevious={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : backWithinWorkflow}
             onNext={() => void handleSpecsNext()}
             onLookupVehicleInfo={() => setVehicleInfoLookupOpen(true)}
           />
@@ -1618,12 +1690,31 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
         </StartTicketPopout>
       ) : null}
       {state.step === "customer" && state.customerFirstFlow && state.activePopout !== "addVehicle" ? (
-        <StartTicketPopout title={state.selectedCustomer ? "Select Vehicle" : "Find Customer"} subtitle={state.selectedCustomer ? `Choose a vehicle for ${state.selectedCustomer.first_name} ${state.selectedCustomer.last_name}.` : "Search by name, phone, email, VIN, or plate."} onBack={closeStartTicketPopout} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+        <StartTicketPopout
+          title={(state.activePopout === "customerVehicles" || state.activePopout === "mileageEntry") && state.selectedCustomer ? state.activePopout === "mileageEntry" ? "Confirm Arrival Mileage" : "Select Vehicle" : "Find Customer"}
+          subtitle={(state.activePopout === "customerVehicles" || state.activePopout === "mileageEntry") && state.selectedCustomer ? state.activePopout === "mileageEntry" ? "Enter the mileage the vehicle arrived with today." : `Choose a vehicle for ${state.selectedCustomer.first_name} ${state.selectedCustomer.last_name}.` : "Search by name, phone, email, VIN, or plate."}
+          onBack={() => {
+            if (state.activePopout === "customerVehicles" || state.activePopout === "mileageEntry") {
+              setState((current) => ({ ...current, activePopout: "customerSearch", validation: null }));
+              return;
+            }
+            backWithinWorkflow();
+          }}
+          onClose={closeStartTicketPopout}
+          closeOnBackdrop={false}
+        >
           <CustomerSearchStep
             selectedCustomer={state.selectedCustomer}
             selectedVehicleId={state.selectedVehicleId}
             validation={state.validation}
-            onBack={closeStartTicketPopout}
+            initialFlowStep={state.activePopout === "mileageEntry" ? "enterMileage" : state.activePopout === "customerVehicles" ? "selectVehicle" : "findCustomer"}
+            onBack={() => {
+              if (state.activePopout === "customerVehicles" || state.activePopout === "mileageEntry") {
+                setState((current) => ({ ...current, activePopout: "customerSearch", validation: null }));
+                return;
+              }
+              backWithinWorkflow();
+            }}
             onSelectCustomer={(selectedCustomer) => setState((current) => ({
               ...current,
               activePopout: "customerVehicles",

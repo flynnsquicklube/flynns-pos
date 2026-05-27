@@ -161,7 +161,7 @@ export function CheckInWallPage({ onOpenTicket }: CheckInWallPageProps) {
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-[var(--pos-text)]">Check-In Wall</h1>
+          <h1 className="text-3xl font-black text-cyan-600">Check-In Wall</h1>
           <p className="mt-1 text-sm text-[var(--pos-muted)]">Vehicles waiting to start service.</p>
         </div>
         <Badge tone="blue">{checkedIn.length} checked in</Badge>

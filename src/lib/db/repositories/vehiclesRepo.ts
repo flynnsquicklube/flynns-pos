@@ -70,7 +70,7 @@ export async function findVehicleByPlate(plate: string, state: string): Promise<
   const rows = await query<Vehicle>(
     `SELECT * FROM vehicles
      WHERE deleted_at IS NULL
-       AND REPLACE(UPPER(COALESCE(plate, '')), ' ', '') = ?
+       AND REPLACE(REPLACE(UPPER(COALESCE(plate, '')), ' ', ''), '-', '') = ?
        AND UPPER(COALESCE(plate_state, '')) = ?
      ORDER BY updated_at DESC
      LIMIT 1`,
@@ -79,19 +79,34 @@ export async function findVehicleByPlate(plate: string, state: string): Promise<
   return rows[0] ?? null;
 }
 
-export async function findVehiclesByPlatePartial(plate: string, state?: string | null, limit = 10): Promise<Vehicle[]> {
+export async function findVehiclesByPlatePartial(plate: string, state?: string | null, limit = 10): Promise<VehicleSearchResult[]> {
   const normalizedPlate = normalizePlate(plate);
   const normalizedState = normalizePlateState(state);
   if (!normalizedPlate) return [];
-  const like = `%${normalizedPlate}%`;
-  return query<Vehicle>(
-    `SELECT * FROM vehicles
-     WHERE deleted_at IS NULL
-       AND REPLACE(UPPER(COALESCE(plate, '')), ' ', '') LIKE ?
-       AND (? = '' OR UPPER(COALESCE(plate_state, '')) = ?)
-     ORDER BY updated_at DESC
-     LIMIT ?`,
-    [like, normalizedState, normalizedState, limit]
+  const selectSql = `SELECT
+       v.*,
+       TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')) AS customer_name,
+       (SELECT MAX(service_date) FROM service_history h WHERE h.vehicle_id = v.id AND h.deleted_at IS NULL) AS last_visit
+     FROM vehicles v
+     LEFT JOIN customers c ON c.id = v.customer_id`;
+  const stateClause = "AND (? = '' OR UPPER(COALESCE(v.plate_state, '')) = ?)";
+  const orderLimitSql = "ORDER BY v.updated_at DESC LIMIT ?";
+  const prefixRows = await query<VehicleSearchResult>(
+    `${selectSql}
+     WHERE v.deleted_at IS NULL
+       AND REPLACE(REPLACE(UPPER(COALESCE(v.plate, '')), ' ', ''), '-', '') LIKE ?
+       ${stateClause}
+     ${orderLimitSql}`,
+    [`${normalizedPlate}%`, normalizedState, normalizedState, limit]
+  );
+  if (prefixRows.length > 0 || normalizedPlate.length < 3) return prefixRows;
+  return query<VehicleSearchResult>(
+    `${selectSql}
+     WHERE v.deleted_at IS NULL
+       AND REPLACE(REPLACE(UPPER(COALESCE(v.plate, '')), ' ', ''), '-', '') LIKE ?
+       ${stateClause}
+     ${orderLimitSql}`,
+    [`%${normalizedPlate}%`, normalizedState, normalizedState, limit]
   );
 }
 

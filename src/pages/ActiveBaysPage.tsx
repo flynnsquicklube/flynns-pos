@@ -189,7 +189,7 @@ export function ActiveBaysPage({ onOpenTicket, onOpenCheckInWall, onOpenWaitingP
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-[var(--pos-text)]">Active Bays</h1>
+          <h1 className="text-3xl font-black text-[var(--pos-blue)]">Active Bays</h1>
           <p className="mt-1 text-sm text-[var(--pos-muted)]">Bay 1 and Bay 2 only. Checked-in vehicles start from the Check-In Wall.</p>
         </div>
         <div className="grid w-full gap-3 sm:w-auto sm:min-w-[520px] sm:grid-cols-3">

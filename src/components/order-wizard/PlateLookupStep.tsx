@@ -4,6 +4,8 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
 import { formatPlateForDisplay, normalizePlate } from "../../lib/domain/vehicles/plateUtils";
+import { US_STATES } from "../../lib/domain/vehicles/usStates";
+import type { VehicleSearchResult } from "../../lib/db/repositories/vehiclesRepo";
 import type { Customer } from "../../types/customer";
 import type { Vehicle } from "../../types/vehicle";
 
@@ -15,20 +17,24 @@ interface PlateLookupStepProps {
   searched?: boolean;
   matchedVehicle?: Vehicle | null;
   matchedCustomer?: Customer | null;
+  plateMatches?: VehicleSearchResult[];
+  partialSearching?: boolean;
   onPlateChange: (value: string) => void;
   onStateChange: (value: string) => void;
   onBack: () => void;
   onSearch: () => void;
-  onUseExistingVehicle?: (mileage: string) => void;
+  onPreviewVehicle?: (vehicle: VehicleSearchResult | Vehicle) => void;
+  onUseExistingVehicle?: (vehicle: VehicleSearchResult | Vehicle, mileage: string) => void;
   onContinue: () => void;
   showInlineBack?: boolean;
 }
 
-export function PlateLookupStep({ plate, plateState, validation, searching = false, searched = false, matchedVehicle, matchedCustomer, onPlateChange, onStateChange, onBack, onSearch, onUseExistingVehicle, onContinue, showInlineBack = true }: PlateLookupStepProps) {
+export function PlateLookupStep({ plate, plateState, validation, searching = false, searched = false, matchedVehicle, matchedCustomer, plateMatches = [], partialSearching = false, onPlateChange, onStateChange, onBack, onSearch, onPreviewVehicle, onUseExistingVehicle, onContinue, showInlineBack = true }: PlateLookupStepProps) {
   const [currentMileage, setCurrentMileage] = useState("");
   const [lowerMileageConfirmed, setLowerMileageConfirmed] = useState(false);
   const normalizedPlate = normalizePlate(plate);
   const hasPlate = Boolean(normalizedPlate);
+  const visibleMatches = matchedVehicle ? plateMatches.filter((vehicle) => vehicle.id !== matchedVehicle.id) : plateMatches;
   const parsedMileage = Number(currentMileage);
   const hasValidMileage = Number.isFinite(parsedMileage) && parsedMileage > 0;
   const lowerThanLastMileage = Boolean(matchedVehicle?.mileage && hasValidMileage && parsedMileage < matchedVehicle.mileage);
@@ -50,11 +56,7 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
           <label className="text-sm font-semibold text-[var(--pos-text)]">
             State
             <select className="mt-2 h-14 w-full rounded-md border border-[var(--brand-border)] bg-white px-3 text-lg font-semibold text-[var(--pos-text)] outline-none focus:border-[var(--brand-primary)] focus:ring-4 focus:ring-[var(--brand-primary-light)]" value={plateState} onChange={(event) => onStateChange(event.target.value)}>
-              <option value="OH">Ohio</option>
-              <option value="IN">Indiana</option>
-              <option value="KY">Kentucky</option>
-              <option value="MI">Michigan</option>
-              <option value="PA">Pennsylvania</option>
+              {US_STATES.map((state) => <option key={state.code} value={state.code}>{state.code} - {state.name}</option>)}
             </select>
           </label>
           <label className="text-sm font-semibold text-[var(--pos-text)]">
@@ -72,6 +74,34 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
           </label>
         </div>
         {validation ? <p className="mt-3 text-sm font-semibold text-amber-700">{validation}</p> : null}
+        {hasPlate && partialSearching ? <p className="mt-3 text-sm font-semibold text-[var(--pos-muted)]">Searching local vehicles...</p> : null}
+        {visibleMatches.length > 0 ? (
+          <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] p-4 text-left">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-lg font-black text-[var(--pos-text)]">{visibleMatches.length} matching vehicle{visibleMatches.length === 1 ? "" : "s"}</div>
+                <p className="text-sm text-[var(--pos-muted)]">Choose the matching vehicle, then confirm current mileage.</p>
+              </div>
+              <span className="rounded-full bg-[var(--pos-blue-soft)] px-3 py-1 text-xs font-black text-[var(--pos-blue)]">{visibleMatches.length}</span>
+            </div>
+            <div className="mt-3 divide-y divide-[var(--pos-border)] rounded-xl border border-[var(--pos-border)]">
+              {visibleMatches.map((vehicle) => (
+                <div key={vehicle.id} className="grid gap-3 p-3 text-sm md:grid-cols-[1.2fr_1fr_auto] md:items-center">
+                  <div>
+                    <div className="font-black text-[var(--pos-text)]">{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Saved vehicle"}</div>
+                    <div className="mt-1 text-[var(--pos-muted)]">Plate {formatPlateForDisplay(vehicle.plate, vehicle.plate_state)} · VIN {vehicle.vin ? vehicle.vin.slice(-8) : "Not recorded"}</div>
+                  </div>
+                  <div className="text-[var(--pos-muted)]">
+                    <div>{vehicle.customer_name?.trim() || "No linked customer"}</div>
+                    <div>{vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : "Mileage not recorded"} · {vehicle.last_visit ? new Date(vehicle.last_visit).toLocaleDateString() : "No last visit"}</div>
+                    {vehicle.oil_type ? <div>Oil: {vehicle.oil_type}</div> : null}
+                  </div>
+                  <Button size="sm" onClick={() => onPreviewVehicle?.(vehicle)}>Use This Vehicle</Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {matchedVehicle ? (
           <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-blue-200 bg-blue-50 p-5 text-left">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -101,7 +131,7 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
                 placeholder="Enter current mileage"
                 helperText={matchedVehicle.mileage ? `Last recorded: ${matchedVehicle.mileage.toLocaleString()} mi` : "No previous mileage recorded."}
               />
-              <Button size="touch" onClick={() => onUseExistingVehicle?.(currentMileage)} disabled={!canUseExistingVehicle}>
+              <Button size="touch" onClick={() => onUseExistingVehicle?.(matchedVehicle, currentMileage)} disabled={!canUseExistingVehicle}>
                 Use Existing Vehicle
               </Button>
             </div>
@@ -124,7 +154,10 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
             ) : null}
           </div>
         ) : null}
-        {searched && !matchedVehicle ? (
+        {hasPlate && !partialSearching && !searched && !matchedVehicle && visibleMatches.length === 0 ? (
+          <p className="mt-3 text-sm font-semibold text-[var(--pos-muted)]">No local matches yet.</p>
+        ) : null}
+        {searched && !matchedVehicle && visibleMatches.length === 0 ? (
           <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 p-5 text-left">
             <div className="text-lg font-black text-[var(--pos-text)]">No local vehicle found.</div>
             <p className="mt-1 text-sm font-semibold text-amber-800">No local vehicle found for {formatPlateForDisplay(plate, plateState)}. Continue with a new vehicle and the plate/state will be filled into Specs.</p>

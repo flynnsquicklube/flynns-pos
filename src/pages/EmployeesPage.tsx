@@ -79,7 +79,7 @@ export function EmployeesPage() {
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Employees" subtitle="Clock in, manage shop coverage, and review local time entries." />
+      <PageHeader theme="orange" title="Employees" subtitle="Clock in, manage shop coverage, and review local time entries." />
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <Card className="p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">

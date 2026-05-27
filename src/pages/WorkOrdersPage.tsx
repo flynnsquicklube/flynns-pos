@@ -207,7 +207,7 @@ export function WorkOrdersPage({ onOpenTicket, onContinueDraft }: WorkOrdersPage
     <section className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-[var(--pos-text)]">Daily Work Orders</h1>
+          <h1 className="text-3xl font-black text-indigo-600">Daily Work Orders</h1>
           <p className="mt-1 text-sm text-[var(--pos-muted)]">Track today's tickets from open to finalized.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] p-2 shadow-sm">

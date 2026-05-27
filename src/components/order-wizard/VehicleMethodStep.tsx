@@ -8,13 +8,64 @@ interface VehicleMethodStepProps {
   onSelectManual: () => void;
 }
 
+const options = [
+  {
+    label: "Customer / Phone",
+    helper: "Find by name, phone, email, VIN, or plate.",
+    icon: UserSearch,
+    iconBg: "bg-cyan-50",
+    iconColor: "text-cyan-600",
+    hoverBorder: "hover:border-cyan-400",
+    hoverBg: "hover:bg-cyan-50",
+    focusRing: "focus-visible:ring-cyan-200",
+    accentBar: "border-t-4 border-t-cyan-400",
+    key: "customer"
+  },
+  {
+    label: "VIN",
+    helper: "Scan or type the VIN barcode.",
+    icon: BadgeCheck,
+    iconBg: "bg-indigo-50",
+    iconColor: "text-indigo-600",
+    hoverBorder: "hover:border-indigo-400",
+    hoverBg: "hover:bg-indigo-50",
+    focusRing: "focus-visible:ring-indigo-200",
+    accentBar: "border-t-4 border-t-indigo-500",
+    key: "vin"
+  },
+  {
+    label: "License Plate",
+    helper: "Search by plate and state.",
+    icon: CarFront,
+    iconBg: "bg-amber-50",
+    iconColor: "text-amber-600",
+    hoverBorder: "hover:border-amber-400",
+    hoverBg: "hover:bg-amber-50",
+    focusRing: "focus-visible:ring-amber-200",
+    accentBar: "border-t-4 border-t-amber-400",
+    key: "plate"
+  },
+  {
+    label: "Manual Entry",
+    helper: "Enter year, make, model, and mileage.",
+    icon: Keyboard,
+    iconBg: "bg-[var(--pos-panel-2)]",
+    iconColor: "text-[var(--pos-muted)]",
+    hoverBorder: "hover:border-[var(--pos-border-strong)]",
+    hoverBg: "hover:bg-[var(--pos-panel-2)]",
+    focusRing: "focus-visible:ring-[var(--pos-blue-soft)]",
+    accentBar: "border-t-4 border-t-[var(--pos-border-strong)]",
+    key: "manual"
+  }
+] as const;
+
 export function VehicleMethodStep({ onSelectCustomer, onSelectVin, onSelectPlate, onSelectManual }: VehicleMethodStepProps) {
-  const options = [
-    { label: "Customer / Phone", helper: "Find by name, phone, email, VIN, or plate.", icon: UserSearch, onClick: onSelectCustomer },
-    { label: "VIN", helper: "Scan or type the VIN barcode.", icon: BadgeCheck, onClick: onSelectVin },
-    { label: "License Plate", helper: "Search by plate and state.", icon: CarFront, onClick: onSelectPlate },
-    { label: "Manual Entry", helper: "Enter year, make, model, and mileage.", icon: Keyboard, onClick: onSelectManual }
-  ];
+  const handlers: Record<string, () => void> = {
+    customer: onSelectCustomer,
+    vin: onSelectVin,
+    plate: onSelectPlate,
+    manual: onSelectManual
+  };
 
   return (
     <div className="flex min-h-[520px] items-center justify-center">
@@ -27,8 +78,12 @@ export function VehicleMethodStep({ onSelectCustomer, onSelectVin, onSelectPlate
           {options.map((option) => {
             const Icon = option.icon;
             return (
-              <button key={option.label} onClick={option.onClick} className="rounded-2xl border border-[var(--brand-border)] bg-white p-8 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary-light)] hover:shadow-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--brand-primary-light)]">
-                <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-[var(--brand-primary-light)] text-[var(--brand-primary)]">
+              <button
+                key={option.key}
+                onClick={handlers[option.key]}
+                className={`rounded-2xl border border-[var(--pos-border)] bg-white p-8 text-center shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-4 ${option.accentBar} ${option.hoverBorder} ${option.hoverBg} ${option.focusRing}`}
+              >
+                <div className={`mx-auto flex h-20 w-20 items-center justify-center rounded-2xl ${option.iconBg} ${option.iconColor}`}>
                   <Icon size={40} />
                 </div>
                 <div className="mt-5 text-xl font-bold text-[var(--pos-text)]">{option.label}</div>

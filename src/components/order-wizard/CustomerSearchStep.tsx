@@ -16,14 +16,15 @@ interface CustomerSearchStepProps {
   selectedCustomer: Customer | null;
   selectedVehicleId: string | null;
   validation: string | null;
+  initialFlowStep?: CustomerFlowStep;
   onBack: () => void;
   onSelectCustomer: (customer: CustomerSearchResult) => void;
   onUseVehicle: (vehicle: VehicleSearchResult) => void;
   onAddVehicleForCustomer: () => void;
 }
 
-export function CustomerSearchStep({ selectedCustomer, selectedVehicleId, validation, onBack, onSelectCustomer, onUseVehicle, onAddVehicleForCustomer }: CustomerSearchStepProps) {
-  const [flowStep, setFlowStep] = useState<CustomerFlowStep>(selectedCustomer ? "selectVehicle" : "findCustomer");
+export function CustomerSearchStep({ selectedCustomer, selectedVehicleId, validation, initialFlowStep, onBack, onSelectCustomer, onUseVehicle, onAddVehicleForCustomer }: CustomerSearchStepProps) {
+  const [flowStep, setFlowStep] = useState<CustomerFlowStep>(initialFlowStep ?? (selectedCustomer ? "selectVehicle" : "findCustomer"));
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CustomerSearchResult[]>([]);
   const [resultCount, setResultCount] = useState(0);
@@ -42,6 +43,11 @@ export function CustomerSearchStep({ selectedCustomer, selectedVehicleId, valida
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!initialFlowStep) return;
+    setFlowStep(initialFlowStep);
+  }, [initialFlowStep]);
 
   const loadVehicles = useCallback((customer: Customer) => {
     setVehicleLoading(true);
@@ -63,9 +69,9 @@ export function CustomerSearchStep({ selectedCustomer, selectedVehicleId, valida
     setSelectedVehicle(null);
     setCurrentMileage("");
     setLowerMileageConfirmed(false);
-    setFlowStep("selectVehicle");
+    setFlowStep(initialFlowStep ?? "selectVehicle");
     loadVehicles(selectedCustomer);
-  }, [loadVehicles, selectedCustomer]);
+  }, [initialFlowStep, loadVehicles, selectedCustomer]);
 
   useEffect(() => {
     if (!selectedVehicleId) return;
@@ -187,7 +193,7 @@ export function CustomerSearchStep({ selectedCustomer, selectedVehicleId, valida
           <div className="flex gap-2">
             {flowStep === "findCustomer" ? <Button variant="secondary" onClick={onBack}>Back</Button> : null}
             {flowStep === "addCustomer" ? <Button variant="secondary" onClick={cancelAdd}>Back</Button> : null}
-            {flowStep === "selectVehicle" ? <Button variant="secondary" onClick={() => setFlowStep("findCustomer")}>Back to Customer Search</Button> : null}
+            {flowStep === "selectVehicle" ? <Button variant="secondary" onClick={onBack}>Back to Customer Search</Button> : null}
             {flowStep === "enterMileage" ? <Button variant="secondary" onClick={backToVehicles}>Back to Vehicles</Button> : null}
             {flowStep === "findCustomer" ? <Button icon={<UserPlus size={16} />} onClick={() => setFlowStep("addCustomer")}>Add Customer</Button> : null}
             {flowStep === "selectVehicle" ? <Button variant="secondary" disabled={!selectedCustomer} onClick={onAddVehicleForCustomer}>Add Vehicle</Button> : null}

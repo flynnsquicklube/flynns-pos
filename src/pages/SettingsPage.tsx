@@ -716,7 +716,7 @@ export function SettingsPage() {
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Settings" subtitle="Configure shop info, services, pricing, integrations, and database tools." />
+      <PageHeader theme="slate" title="Settings" subtitle="Configure shop info, services, pricing, integrations, and database tools." />
       <div className="-mx-1 overflow-x-auto px-1">
         <div className="flex min-w-max gap-1 rounded-[var(--pos-radius-lg)] border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-1.5">
           {tabs.map((tab) => (

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <path d="M4 14 L4 22 C7 22 7 26 4 26 L4 34 L44 34 L44 26 C41 26 41 22 44 22 L44 14 Z" fill="#F5F3FF" stroke="#7C3AED" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M17 14 L17 34" stroke="#7C3AED" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <text x="29" y="27" font-size="10" font-weight="900" fill="#7C3AED" text-anchor="middle" font-family="system-ui">%</text>
+</svg>

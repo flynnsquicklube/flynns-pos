@@ -38,7 +38,7 @@ export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Orders" subtitle="Search completed, active, canceled, and imported orders." />
+      <PageHeader theme="indigo" title="Orders" subtitle="Search completed, active, canceled, and imported orders." />
       <div className="flex flex-wrap items-center gap-3">
         {(["today", "last7", "month", "all"] as DateRangeKey[]).map((key) => (
           <Button key={key} variant={rangeKey === key ? "primary" : "secondary"} onClick={() => setRangeKey(key)}>{rangeForKey(key).label}</Button>

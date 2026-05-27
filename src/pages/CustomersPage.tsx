@@ -6,6 +6,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Badge } from "../components/ui/Badge";
+import { CustomerProfileDrawer, type CustomerProfileTab } from "../components/customers/CustomerProfileDrawer";
 import {
   countCustomerSearchResults,
   createCustomer,
@@ -18,7 +19,7 @@ import {
   type CustomerSearchResult,
   type CustomerStats
 } from "../lib/db/repositories/customersRepo";
-import { createVehicle, searchVehicles } from "../lib/db/repositories/vehiclesRepo";
+import { searchVehicles } from "../lib/db/repositories/vehiclesRepo";
 import { listTicketsWithDetails } from "../lib/db/repositories/ticketsRepo";
 import { getServiceHistoryByCustomer } from "../lib/db/repositories/serviceHistoryRepo";
 import { useToast } from "../components/ui/useToast";
@@ -26,20 +27,21 @@ import type { Customer } from "../types/customer";
 import type { Vehicle } from "../types/vehicle";
 import type { TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
-import { formatMoney } from "../lib/utils/money";
 import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
 import { createCustomerCoupon, listCouponsByCustomer } from "../lib/db/repositories/couponsRepo";
 import { listReferralRewardsByCustomer } from "../lib/db/repositories/referralsRepo";
-import { getPunchCardByVehicle, type VehiclePunchCard } from "../lib/db/repositories/punchCardsRepo";
+import { adjustPunchCard, getPunchCardByVehicle, listPunchEvents, type VehiclePunchCard, type VehiclePunchEvent } from "../lib/db/repositories/punchCardsRepo";
 import type { CustomerCouponRecord } from "../lib/domain/loyalty/couponRules";
 import type { ReferralReward } from "../lib/domain/loyalty/referralRules";
 
 interface CustomersPageProps {
   initialCustomerId?: string;
   onStartTicket?: () => void;
+  onOpenTicket?: (ticketId: string) => void;
+  onOpenVehicle?: (vehicleId: string) => void;
 }
 
-export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPageProps) {
+export function CustomersPage({ initialCustomerId, onStartTicket, onOpenTicket, onOpenVehicle }: CustomersPageProps) {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [customers, setCustomers] = useState<CustomerSearchResult[]>([]);
@@ -54,11 +56,12 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
   const [history, setHistory] = useState<ServiceHistory[]>([]);
   const [coupons, setCoupons] = useState<CustomerCouponRecord[]>([]);
   const [referrals, setReferrals] = useState<ReferralReward[]>([]);
-  const [punchCards, setPunchCards] = useState<Array<{ vehicle: Vehicle; card: VehiclePunchCard | null }>>([]);
+  const [punchCards, setPunchCards] = useState<Array<{ vehicle: Vehicle; card: VehiclePunchCard | null; events: VehiclePunchEvent[] }>>([]);
+  const [profileDefaultTab, setProfileDefaultTab] = useState<CustomerProfileTab>("overview");
   const [manualCoupon, setManualCoupon] = useState({ title: "$10 Manual Coupon", amount: "10" });
+  const [punchNote, setPunchNote] = useState("");
   const [newCustomer, setNewCustomer] = useState({ first_name: "", last_name: "", phone: "", email: "", notes: "" });
   const [editCustomer, setEditCustomer] = useState({ first_name: "", last_name: "", phone: "", email: "", notes: "" });
-  const [newVehicle, setNewVehicle] = useState({ year: "", make: "", model: "", vin: "", plate: "", plate_state: "OH", mileage: "", oil_type: "" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { notify } = useToast();
@@ -95,8 +98,9 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
       .finally(() => setLoading(false));
   }, [activeFilter, debouncedSearch, filtersFor, initialCustomerId]);
 
-  const openCustomer = useCallback(async (customer: Customer) => {
+  const openCustomer = useCallback(async (customer: Customer, defaultTab: CustomerProfileTab = "overview") => {
     setSelected(customer);
+    setProfileDefaultTab(defaultTab);
     setEditCustomer({
       first_name: customer.first_name,
       last_name: customer.last_name,
@@ -116,7 +120,7 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
     setHistory(serviceHistory);
     setCoupons(customerCoupons);
     setReferrals(customerReferrals);
-    setPunchCards(await Promise.all(customerVehicles.map(async (vehicle) => ({ vehicle, card: await getPunchCardByVehicle(vehicle.id) }))));
+    setPunchCards(await Promise.all(customerVehicles.map(async (vehicle) => ({ vehicle, card: await getPunchCardByVehicle(vehicle.id), events: await listPunchEvents(vehicle.id) }))));
   }, []);
 
   useEffect(() => {
@@ -134,29 +138,6 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
     setSelected(refreshed);
     void getCustomerStats().then(setStats).catch(() => undefined);
     loadCustomers();
-  };
-
-  const addVehicle = async () => {
-    if (!selected) return;
-    if (!newVehicle.year || !newVehicle.make.trim() || !newVehicle.model.trim()) {
-      notify({ tone: "error", title: "Vehicle details needed", message: "Year, make, and model are required." });
-      return;
-    }
-    await createVehicle({
-      customer_id: selected.id,
-      vin: newVehicle.vin || null,
-      plate: newVehicle.plate || null,
-      plate_state: newVehicle.plate_state || null,
-      year: Number(newVehicle.year),
-      make: newVehicle.make,
-      model: newVehicle.model,
-      mileage: Number(newVehicle.mileage) || null,
-      oil_type: newVehicle.oil_type || null,
-      notes: null
-    });
-    notify({ tone: "success", title: "Vehicle added" });
-    setNewVehicle({ year: "", make: "", model: "", vin: "", plate: "", plate_state: "OH", mileage: "", oil_type: "" });
-    await openCustomer(selected);
   };
 
   useEffect(() => {
@@ -204,6 +185,30 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
     await openCustomer(selected);
   };
 
+  const addPunch = async (vehicle: Vehicle) => {
+    if (!selected) return;
+    await adjustPunchCard({
+      customerId: selected.id,
+      vehicleId: vehicle.id,
+      punchDelta: 1,
+      note: punchNote.trim() || "Manual punch adjustment."
+    });
+    notify({ tone: "success", title: "Punch added", message: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle" });
+    setPunchNote("");
+    await openCustomer(selected, "punchCards");
+  };
+
+  const startTicketForCustomer = (vehicle?: Vehicle) => {
+    if (!selected) return;
+    setStartTicketContext({ customerId: selected.id, vehicleId: vehicle?.id, source: vehicle ? "vehicle_detail" : "customer_detail" });
+    onStartTicket?.();
+  };
+
+  const startTicketForSearchResult = (customer: CustomerSearchResult) => {
+    setStartTicketContext({ customerId: customer.id, source: "customer_detail" });
+    onStartTicket?.();
+  };
+
   const hasSearchOrFilter = Boolean(debouncedSearch.trim() || activeFilter);
   const filterButtons: { key: CustomerQuickFilter; label: string }[] = [
     { key: "recent", label: "Recent" },
@@ -215,7 +220,7 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <PageHeader className="flex-1" title="Customers" subtitle="Search customer records, linked vehicles, and service history." />
+        <PageHeader theme="cyan" className="flex-1" title="Customers" subtitle="Search customer records, linked vehicles, and service history." />
         <div className="flex gap-2">
           <Button size="touch" icon={<Plus size={16} />} onClick={() => setShowAdd((value) => !value)}>{showAdd ? "Close" : "Add Customer"}</Button>
         </div>
@@ -281,20 +286,21 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
           <div className="divide-y divide-[var(--pos-border)]">
             {customers.map((customer) => (
               <div key={customer.id} className="grid gap-3 px-5 py-4 text-sm hover:bg-[var(--pos-panel-2)] lg:grid-cols-[1fr_160px_220px_130px_150px_auto] lg:items-center">
-                <div>
+                <button type="button" className="text-left" onClick={() => void openCustomer(customer)}>
                   <div className="flex flex-wrap items-center gap-2 font-semibold text-[var(--pos-text)]">
                     {customer.first_name} {customer.last_name}
                     {customer.is_imported ? <Badge tone="blue">Imported</Badge> : null}
+                    {customer.open_ticket_count ? <Badge tone="yellow">{customer.open_ticket_count} open</Badge> : null}
                   </div>
                   <div className="text-[var(--pos-muted)]">{customer.notes ?? "No customer notes"}</div>
-                </div>
+                </button>
                 <div className="text-[var(--pos-text)]">{customer.phone}</div>
                 <div className="text-[var(--pos-muted)]">{customer.email ?? "-"}</div>
-                <div className="text-[var(--pos-muted)]">{customer.vehicle_count} vehicle{customer.vehicle_count === 1 ? "" : "s"}</div>
+                <button type="button" className="text-left font-black text-[var(--pos-blue)] hover:underline" onClick={() => void openCustomer(customer, "vehicles")}>{customer.vehicle_count} vehicle{customer.vehicle_count === 1 ? "" : "s"}</button>
                 <div className="text-[var(--pos-muted)]">{customer.last_visit ? new Date(customer.last_visit).toLocaleDateString() : "No visits"}</div>
                 <div className="flex flex-wrap gap-2">
                   <Button variant="secondary" onClick={() => void openCustomer(customer)}>Open</Button>
-                  <Button onClick={() => { setStartTicketContext({ customerId: customer.id, source: "customer_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
+                  <Button onClick={() => startTicketForSearchResult(customer)}>Start Ticket</Button>
                 </div>
               </div>
             ))}
@@ -307,89 +313,30 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
         ) : null}
       </Card> : null}
       {selected ? (
-        <Card className="p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-bold text-[var(--pos-text)]">Customer Detail: {selected.first_name} {selected.last_name}</h2>
-            <div className="flex gap-2">
-              <Button onClick={() => { setStartTicketContext({ customerId: selected.id, source: "customer_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
-            </div>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <Input label="First name" value={editCustomer.first_name} onChange={(event) => setEditCustomer({ ...editCustomer, first_name: event.target.value })} />
-            <Input label="Last name" value={editCustomer.last_name} onChange={(event) => setEditCustomer({ ...editCustomer, last_name: event.target.value })} />
-            <Input label="Phone" value={editCustomer.phone} onChange={(event) => setEditCustomer({ ...editCustomer, phone: event.target.value })} />
-            <Input label="Email" value={editCustomer.email} onChange={(event) => setEditCustomer({ ...editCustomer, email: event.target.value })} />
-            <Input className="md:col-span-2" label="Notes" value={editCustomer.notes} onChange={(event) => setEditCustomer({ ...editCustomer, notes: event.target.value })} />
-          </div>
-          <Button className="mt-3" onClick={saveSelectedCustomer}>Save Customer</Button>
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            <div className="rounded-lg border border-[var(--pos-border)] p-4">
-              <div className="font-bold text-[var(--pos-text)]">Customer App Link</div>
-              <div className="mt-3 space-y-2 text-sm text-[var(--pos-muted)]">
-                <div>Status: <strong>{selected.app_link_status ?? (selected.firebase_uid ? "linked" : "unlinked")}</strong></div>
-                <div>Firebase UID: <strong>{selected.firebase_uid ?? "Not linked"}</strong></div>
-                <div>App email: <strong>{selected.app_email ?? selected.email ?? "-"}</strong></div>
-                <div>App phone: <strong>{selected.app_phone ?? selected.phone ?? "-"}</strong></div>
-              </div>
-            </div>
-            <div className="rounded-lg border border-[var(--pos-border)] p-4">
-              <div className="font-bold text-[var(--pos-text)]">Coupons ({coupons.length})</div>
-              <div className="mt-3 space-y-2 text-sm">
-                {coupons.slice(0, 8).map((coupon) => (
-                  <div key={coupon.id} className="rounded-md border border-[var(--pos-border)] p-2">
-                    <div className="font-semibold text-[var(--pos-text)]">{coupon.title} · {coupon.status}</div>
-                    <div className="text-[var(--pos-muted)]">{coupon.discount_type === "fixed" ? formatMoney(coupon.discount_amount) : coupon.discount_type === "percent" ? `${coupon.discount_amount}%` : "Free oil change"} · {coupon.source ?? "manual"}</div>
-                  </div>
-                ))}
-                {!coupons.length ? <div className="text-[var(--pos-muted)]">No coupons yet.</div> : null}
-              </div>
-              <div className="mt-4 grid gap-2">
-                <Input label="Manual coupon title" value={manualCoupon.title} onChange={(event) => setManualCoupon({ ...manualCoupon, title: event.target.value })} />
-                <Input label="Amount" type="number" value={manualCoupon.amount} onChange={(event) => setManualCoupon({ ...manualCoupon, amount: event.target.value })} />
-                <Button onClick={addManualCoupon}>Create Manual Coupon</Button>
-              </div>
-            </div>
-            <div className="rounded-lg border border-[var(--pos-border)] p-4">
-              <div className="font-bold text-[var(--pos-text)]">Rewards</div>
-              <div className="mt-3 space-y-2 text-sm">
-                {punchCards.map(({ vehicle, card }) => (
-                  <div key={vehicle.id} className="rounded-md border border-[var(--pos-border)] p-2">
-                    <div className="font-semibold text-[var(--pos-text)]">{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}</div>
-                    <div className="text-[var(--pos-muted)]">{card?.punch_count ?? 0}/5 punches · {card?.free_rewards_available ?? 0} free rewards</div>
-                  </div>
-                ))}
-                {!punchCards.length ? <div className="text-[var(--pos-muted)]">No vehicle punch cards yet.</div> : null}
-              </div>
-              <div className="mt-4 font-bold text-[var(--pos-text)]">Referrals ({referrals.length})</div>
-              <div className="mt-2 space-y-1 text-sm text-[var(--pos-muted)]">{referrals.slice(0, 5).map((referral) => <div key={referral.id}>{referral.status} · {formatMoney(referral.reward_amount)}</div>)}</div>
-            </div>
-            <div className="rounded-lg border border-[var(--pos-border)] p-4">
-              <div className="font-bold text-[var(--pos-text)]">Vehicles ({vehicles.length})</div>
-              <div className="mt-3 space-y-2 text-sm">{vehicles.map((vehicle) => <div key={vehicle.id}>{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")} · {vehicle.plate ?? vehicle.vin ?? "No ID"}</div>)}</div>
-              <div className="mt-4 grid gap-2">
-                <Input label="Year" value={newVehicle.year} onChange={(event) => setNewVehicle({ ...newVehicle, year: event.target.value })} />
-                <Input label="Make" value={newVehicle.make} onChange={(event) => setNewVehicle({ ...newVehicle, make: event.target.value })} />
-                <Input label="Model" value={newVehicle.model} onChange={(event) => setNewVehicle({ ...newVehicle, model: event.target.value })} />
-                <Input label="VIN" value={newVehicle.vin} onChange={(event) => setNewVehicle({ ...newVehicle, vin: event.target.value })} />
-                <Input label="Plate" value={newVehicle.plate} onChange={(event) => setNewVehicle({ ...newVehicle, plate: event.target.value.toUpperCase() })} />
-                <Input label="Mileage" value={newVehicle.mileage} onChange={(event) => setNewVehicle({ ...newVehicle, mileage: event.target.value })} />
-                <Button onClick={addVehicle}>Add Vehicle</Button>
-              </div>
-            </div>
-            <div className="rounded-lg border border-[var(--pos-border)] p-4">
-              <div className="font-bold text-[var(--pos-text)]">Tickets ({tickets.length})</div>
-              <div className="mt-3 space-y-2 text-sm">
-                <div>Total spent: <strong>{formatMoney(tickets.filter((ticket) => ticket.status === "completed").reduce((sum, ticket) => sum + ticket.total, 0))}</strong></div>
-                <div>Last visit: <strong>{tickets[0]?.completed_at ? new Date(tickets[0].completed_at).toLocaleDateString() : "None"}</strong></div>
-                {tickets.slice(0, 6).map((ticket) => <div key={ticket.id}>{ticket.status} · {formatMoney(ticket.total)} · {ticket.service_names ?? "Ticket"}</div>)}
-              </div>
-            </div>
-            <div className="rounded-lg border border-[var(--pos-border)] p-4">
-              <div className="font-bold text-[var(--pos-text)]">Service History ({history.length})</div>
-              <div className="mt-3 space-y-2 text-sm">{history.slice(0, 8).map((entry) => <div key={entry.id}>{new Date(entry.service_date).toLocaleDateString()} · {entry.mileage.toLocaleString()} mi · {entry.oil_type ?? "Service"}</div>)}</div>
-            </div>
-          </div>
-        </Card>
+        <CustomerProfileDrawer
+          customer={selected}
+          vehicles={vehicles}
+          tickets={tickets}
+          history={history}
+          coupons={coupons}
+          referrals={referrals}
+          punchCards={punchCards}
+          defaultTab={profileDefaultTab}
+          editCustomer={editCustomer}
+          manualCoupon={manualCoupon}
+          punchNote={punchNote}
+          onEditCustomerChange={setEditCustomer}
+          onManualCouponChange={setManualCoupon}
+          onPunchNoteChange={setPunchNote}
+          onClose={() => setSelected(null)}
+          onSaveCustomer={saveSelectedCustomer}
+          onStartTicket={startTicketForCustomer}
+          onOpenVehicle={onOpenVehicle}
+          onOpenTicket={onOpenTicket}
+          onAddVehicle={() => startTicketForCustomer()}
+          onAssignCoupon={addManualCoupon}
+          onAddPunch={(vehicle) => void addPunch(vehicle)}
+        />
       ) : null}
     </section>
   );

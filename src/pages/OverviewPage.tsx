@@ -43,7 +43,7 @@ export function OverviewPage({ onStartTicket, onOpenBays, onOpenOrders, onOpenIn
 
   return (
     <section className="space-y-6">
-      <PageHeader title="Dashboard" subtitle="Today's operational shop flow. Financial analytics are under Admin." action={<Button icon={<Sparkles size={18} />} onClick={onStartTicket}>Quick Start Ticket</Button>} />
+      <PageHeader theme="blue" title="Dashboard" subtitle="Today's operational shop flow. Financial analytics are under Admin." action={<Button icon={<Sparkles size={18} />} onClick={onStartTicket}>Quick Start Ticket</Button>} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         {kpis.map((kpi) => (
           <button

@@ -16,6 +16,7 @@ import type { Customer } from "../types/customer";
 import type { TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
 import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
+import { US_STATES } from "../lib/domain/vehicles/usStates";
 import { decodeVinWithFallback, isVinDecodeEnabled } from "../lib/integrations/vinDecoder/vinDecoder.service";
 import type { NormalizedVehicleDecode } from "../lib/integrations/vinDecoder/vinDecoder.types";
 import { isFuelEconomyEnabled, searchEpaVehicleCandidates } from "../lib/integrations/fuelEconomy/fuelEconomy.service";
@@ -283,7 +284,7 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <PageHeader className="flex-1" title="Vehicles" subtitle="Find vehicles by VIN, plate, customer, or service history." />
+        <PageHeader theme="cyan" className="flex-1" title="Vehicles" subtitle="Find vehicles by VIN, plate, customer, or service history." />
         <Button variant="secondary" icon={<Plus size={16} />} onClick={() => { setShowAdd(true); setSelected(null); setForm({ customer_id: customers[0]?.id ?? "", year: "", make: "", model: "", vin: "", plate: "", plate_state: "OH", mileage: "", oil_type: "", notes: "" }); }}>Add Vehicle</Button>
       </div>
       <Card className="p-5">
@@ -363,7 +364,11 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
             <Input label="Model" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} />
             <Input label="VIN" value={form.vin} onChange={(event) => setForm({ ...form, vin: event.target.value })} />
             <Input label="Plate" value={form.plate} onChange={(event) => setForm({ ...form, plate: event.target.value.toUpperCase() })} />
-            <Input label="State" value={form.plate_state} onChange={(event) => setForm({ ...form, plate_state: event.target.value.toUpperCase() })} />
+            <label className="text-sm font-semibold text-[var(--pos-text)]">State
+              <select className="mt-2 h-11 w-full rounded-md border border-[var(--pos-border)] bg-white px-3 text-[var(--pos-text)]" value={form.plate_state} onChange={(event) => setForm({ ...form, plate_state: event.target.value })}>
+                {US_STATES.map((state) => <option key={state.code} value={state.code}>{state.code} - {state.name}</option>)}
+              </select>
+            </label>
             <Input label="Mileage" value={form.mileage} onChange={(event) => setForm({ ...form, mileage: event.target.value })} />
             <Input label="Oil type" value={form.oil_type} onChange={(event) => setForm({ ...form, oil_type: event.target.value })} />
             <Input className="md:col-span-3" label="Notes" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />

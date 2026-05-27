@@ -77,7 +77,7 @@ function renderPage(route: Route, navigate: (page: PageKey, entityId?: string, s
     case "ticket-detail":
       return <TicketDetailPage ticketId={route.entityId} routeState={route.state} onBack={(destination) => navigate(pageFromPath(destination.path))} onStartTicket={() => navigate("order-wizard")} onOpenCustomer={(id) => navigate("customers", id)} onOpenVehicle={(id) => navigate("vehicles", id)} />;
     case "customers":
-      return <CustomersPage initialCustomerId={route.entityId} onStartTicket={() => navigate("order-wizard")} />;
+      return <CustomersPage initialCustomerId={route.entityId} onStartTicket={() => navigate("order-wizard")} onOpenTicket={(id) => navigate("ticket-detail", id, { from: "/orders", fromLabel: "Orders" })} onOpenVehicle={(id) => navigate("vehicles", id)} />;
     case "vehicles":
       return <VehiclesPage initialVehicleId={route.entityId} onStartTicket={() => navigate("order-wizard")} />;
     case "inventory":

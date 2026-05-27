@@ -104,7 +104,7 @@ export function ReportsPage() {
 
   return (
     <section className="space-y-5">
-      <PageHeader title="Admin" subtitle="Business performance, financial reporting, inventory value, and closeout analytics." />
+      <PageHeader theme="slate" title="Admin" subtitle="Business performance, financial reporting, inventory value, and closeout analytics." />
       {!allowed ? <EmptyState title="Manager permission required" message="Financial analytics are visible to owner and manager roles only." /> : null}
       {allowed ? <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

@@ -59,6 +59,18 @@ interface ServicingStepProps {
 const categoryTabs = ["Packages", "Filters", "Wipers", "Fluids", "Fees", "Custom"] as const;
 type CategoryTab = (typeof categoryTabs)[number];
 
+const categoryColors: Partial<Record<PackageCategory, { icon: string; bg: string; border: string; selected: string; badge: string }>> = {
+  "Oil Changes":         { icon: "text-amber-600",             bg: "bg-amber-50",                    border: "border-amber-300",                  selected: "bg-amber-50",                  badge: "bg-amber-500" },
+  "Filters / Wipers":    { icon: "text-cyan-600",              bg: "bg-cyan-50",                     border: "border-cyan-300",                   selected: "bg-cyan-50",                   badge: "bg-cyan-500" },
+  "Brakes":              { icon: "text-red-600",               bg: "bg-red-50",                      border: "border-red-300",                    selected: "bg-red-50",                    badge: "bg-red-500" },
+  "Belts / Tune-Up":     { icon: "text-orange-600",            bg: "bg-orange-50",                   border: "border-orange-300",                 selected: "bg-orange-50",                 badge: "bg-orange-500" },
+  "A/C":                 { icon: "text-[var(--pos-blue)]",     bg: "bg-[var(--pos-blue-soft)]",      border: "border-[var(--pos-blue)]",          selected: "bg-[var(--pos-blue-soft)]",    badge: "bg-[var(--pos-blue)]" },
+  "Tires":               { icon: "text-[var(--pos-muted)]",    bg: "bg-[var(--pos-panel-2)]",        border: "border-[var(--pos-border-strong)]", selected: "bg-[var(--pos-panel-2)]",      badge: "bg-[var(--pos-muted)]" },
+  "Fluids / Drivetrain": { icon: "text-purple-600",            bg: "bg-purple-50",                   border: "border-purple-300",                 selected: "bg-purple-50",                 badge: "bg-purple-500" },
+  "Battery":             { icon: "text-yellow-600",            bg: "bg-yellow-50",                   border: "border-yellow-300",                 selected: "bg-yellow-50",                 badge: "bg-yellow-500" },
+  "Labor / Other":       { icon: "text-[var(--pos-muted)]",    bg: "bg-[var(--pos-panel-2)]",        border: "border-[var(--pos-border-strong)]", selected: "bg-[var(--pos-panel-2)]",      badge: "bg-[var(--pos-muted)]" }
+};
+
 const featuredCategories: Record<Exclude<CategoryTab, "Packages" | "Custom">, string[]> = {
   Filters: ["filters", "filter"],
   Wipers: ["wipers", "wiper"],
@@ -181,22 +193,23 @@ export function ServicingStep(props: ServicingStepProps) {
                 if (categoryPackages.length === 0) return null;
                 const expanded = expandedCategories.has(category);
                 const categorySelected = selectedPackageCategory === category;
+                const colors = categoryColors[category] ?? { icon: "text-[var(--pos-blue-2)]", bg: "bg-[var(--pos-blue-soft)]", border: "border-[var(--pos-blue)]", selected: "bg-[var(--pos-blue-soft)]", badge: "bg-[var(--pos-blue)]" };
                 return (
-                  <section key={category} className={`overflow-hidden rounded-2xl border bg-[var(--pos-card)] shadow-sm ${categorySelected ? "border-[var(--pos-blue)]" : "border-[var(--pos-border)]"}`}>
+                  <section key={category} className={`overflow-hidden rounded-2xl border bg-[var(--pos-card)] shadow-sm ${categorySelected ? colors.border : "border-[var(--pos-border)]"}`}>
                     <button
                       type="button"
                       onClick={() => togglePackageCategory(category)}
-                      className={`flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--pos-blue-soft)] ${categorySelected ? "bg-[var(--pos-blue-soft)]" : "bg-[var(--pos-card)] hover:bg-[var(--pos-card-hover)]"}`}
+                      className={`flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--pos-blue-soft)] ${categorySelected ? colors.selected : "bg-[var(--pos-card)] hover:bg-[var(--pos-card-hover)]"}`}
                       aria-expanded={expanded}
                     >
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--pos-blue-soft)] text-[var(--pos-blue-2)]">
+                        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${colors.bg} ${colors.icon}`}>
                           <PackagePlus size={21} />
                         </div>
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-base font-black text-[var(--pos-text)]">{category}</h3>
-                            {categorySelected ? <span className="rounded-full bg-[var(--pos-blue)] px-2.5 py-1 text-xs font-black text-white">Selected</span> : null}
+                            <h3 className={`text-base font-black ${categorySelected ? colors.icon : "text-[var(--pos-text)]"}`}>{category}</h3>
+                            {categorySelected ? <span className={`rounded-full px-2.5 py-1 text-xs font-black text-white ${colors.badge}`}>Selected</span> : null}
                           </div>
                           <p className="mt-1 text-sm text-[var(--pos-muted)]">{categoryPackages.length} active package{categoryPackages.length === 1 ? "" : "s"}</p>
                         </div>
