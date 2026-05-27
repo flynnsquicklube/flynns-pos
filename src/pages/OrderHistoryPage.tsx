@@ -5,6 +5,7 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
+import { TouchSelect } from "../components/ui/TouchSelect";
 import { listOrderHistory } from "../lib/db/repositories/ticketsRepo";
 import { getDisplayInvoiceNumber } from "../lib/domain/invoices/invoiceNumber";
 import { rangeForKey, type DateRangeKey } from "../lib/db/repositories/reportsRepo";
@@ -43,20 +44,20 @@ export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
         {(["today", "last7", "month", "all"] as DateRangeKey[]).map((key) => (
           <Button key={key} variant={rangeKey === key ? "primary" : "secondary"} onClick={() => setRangeKey(key)}>{rangeForKey(key).label}</Button>
         ))}
-        <select className="min-h-12 rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-sm font-semibold text-[var(--pos-text)]" value={status} onChange={(event) => setStatus(event.target.value)}>
-          <option value="all">All statuses</option>
-          <option value="checked_in">Checked In</option>
-          <option value="in_service">In Service</option>
-          <option value="waiting_payment">Waiting Payment</option>
-          <option value="completed">Completed</option>
-          <option value="canceled">Canceled</option>
-        </select>
-        <select className="min-h-12 rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-sm font-semibold text-[var(--pos-text)]" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
-          <option value="all">All pay statuses</option>
-          <option value="paid">Paid</option>
-          <option value="partially_paid">Partially Paid</option>
-          <option value="unpaid">Unpaid</option>
-        </select>
+        <div className="w-48"><TouchSelect value={status} onChange={setStatus} options={[
+          { value: "all", label: "All statuses" },
+          { value: "checked_in", label: "Checked In" },
+          { value: "in_service", label: "In Service" },
+          { value: "waiting_payment", label: "Waiting Payment" },
+          { value: "completed", label: "Completed" },
+          { value: "canceled", label: "Canceled" }
+        ]} /></div>
+        <div className="w-52"><TouchSelect value={paymentStatus} onChange={setPaymentStatus} options={[
+          { value: "all", label: "All pay statuses" },
+          { value: "paid", label: "Paid" },
+          { value: "partially_paid", label: "Partially Paid" },
+          { value: "unpaid", label: "Unpaid" }
+        ]} /></div>
         <Input className="max-w-sm" placeholder="Customer, vehicle, invoice #, VIN, plate" value={search} onChange={(event) => setSearch(event.target.value)} />
       </div>
       {error ? <Card className="p-4 text-sm text-red-700">{error}</Card> : null}

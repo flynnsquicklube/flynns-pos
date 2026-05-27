@@ -3,6 +3,7 @@ import { listSwitchableEmployees, setCurrentEmployee } from "../../lib/security/
 import { verifyEmployeePin, type Employee } from "../../lib/db/repositories/employeesRepo";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { TouchSelect } from "../ui/TouchSelect";
 
 interface EmployeePinModalProps {
   onClose: () => void;
@@ -37,11 +38,9 @@ export function EmployeePinModal({ onClose, onSwitched }: EmployeePinModalProps)
       <div className="w-full max-w-md rounded-[var(--pos-radius-xl)] border border-[var(--pos-border-strong)] bg-[var(--pos-panel)] p-5 shadow-2xl">
         <h2 className="text-xl font-black text-[var(--pos-text)]">Switch Employee</h2>
         <p className="mt-1 text-sm text-[var(--pos-muted)]">Select an employee and enter PIN if one is configured.</p>
-        <label className="mt-4 block text-sm font-semibold text-[var(--pos-muted)]">Employee
-          <select className="mt-2 h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-3 text-[var(--pos-text)]" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}>
-            {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.display_name} · {employee.role}</option>)}
-          </select>
-        </label>
+        <div className="mt-4">
+          <TouchSelect label="Employee" value={employeeId} onChange={setEmployeeId} options={employees.map((employee) => ({ value: employee.id, label: employee.display_name, description: employee.role }))} searchable />
+        </div>
         <Input className="mt-3" label="PIN" type="password" inputMode="numeric" value={pin} onChange={(event) => setPin(event.target.value)} />
         {error ? <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</div> : null}
         <div className="mt-5 grid gap-3 sm:grid-cols-2">

@@ -1,20 +1,4 @@
-import {
-  BarChart3,
-  Boxes,
-  ChevronsLeft,
-  ChevronsRight,
-  ClipboardList,
-  Columns3,
-  CreditCard,
-  FileText,
-  Gauge,
-  History,
-  PlusCircle,
-  PanelLeft,
-  Settings,
-  Users,
-  Wifi
-} from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Wifi } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { BrandLogo } from "../branding/BrandLogo";
 import { defaultBrand } from "../../lib/branding/defaultBrand";
@@ -23,6 +7,22 @@ import { brandChangedEvent } from "../../lib/branding/brandStorage";
 import { getElectronBridgeDebug } from "../../lib/db/sqlite";
 import { getCurrentEmployee } from "../../lib/security/currentUser";
 import { hasPermission } from "../../lib/security/permissions";
+import {
+  IconActiveBays,
+  IconBlankOrder,
+  IconCheckInWall,
+  IconCustomers,
+  IconDashboard,
+  IconEmployees,
+  IconInventory,
+  IconOrderManager,
+  IconPaymentManager,
+  IconReports,
+  IconSettings,
+  IconStartTicket,
+  IconVehicles,
+  IconWorkOrders
+} from "../ui/PosNavIcons";
 
 export type PageKey =
   | "overview"
@@ -49,46 +49,53 @@ export type PageKey =
   | "ticket-detail"
   | "vehicles";
 
-const navSections = [
+type NavIcon = React.ComponentType<{ size?: number; className?: string }>;
+
+const navSections: Array<{
+  label: string;
+  items: ReadonlyArray<{ key: string; label: string; icon: NavIcon }>;
+}> = [
   {
     label: "Shop",
     items: [
-      { key: "overview", label: "Dashboard", icon: Gauge },
-      { key: "order-wizard", label: "Start Ticket", icon: PlusCircle },
-      { key: "work-orders", label: "Work Orders", icon: Columns3 },
-      { key: "check-in-wall", label: "Check-In Wall", icon: ClipboardList },
-      { key: "active-bays", label: "Active Bays", icon: PanelLeft }
+      { key: "overview", label: "Dashboard", icon: IconDashboard },
+      { key: "order-wizard", label: "Start Ticket", icon: IconStartTicket },
+      { key: "work-orders", label: "Work Orders", icon: IconWorkOrders },
+      { key: "check-in-wall", label: "Check-In Wall", icon: IconCheckInWall },
+      { key: "active-bays", label: "Active Bays", icon: IconActiveBays }
     ]
   },
   {
     label: "Operations",
     items: [
-      { key: "order-history", label: "Order Manager", icon: History },
-      { key: "payments", label: "Payment Manager", icon: CreditCard },
-      { key: "blank-order", label: "Blank Order", icon: FileText },
-      { key: "inventory", label: "Inventory", icon: Boxes },
-      { key: "customers", label: "Customers/Fleets", icon: Users }
+      { key: "order-history", label: "Order Manager", icon: IconOrderManager },
+      { key: "payments", label: "Payment Manager", icon: IconPaymentManager },
+      { key: "blank-order", label: "Blank Order / Quote", icon: IconBlankOrder },
+      { key: "inventory", label: "Inventory", icon: IconInventory },
+      { key: "customers", label: "Customers / Fleets", icon: IconCustomers },
+      { key: "vehicles", label: "Vehicles", icon: IconVehicles }
     ]
   },
   {
     label: "Admin",
     items: [
-      { key: "reports", label: "Admin/Reports", icon: BarChart3 },
-      { key: "settings", label: "Settings", icon: Settings }
+      { key: "employees", label: "Employees", icon: IconEmployees },
+      { key: "reports", label: "Admin / Reports", icon: IconReports },
+      { key: "settings", label: "Settings", icon: IconSettings }
     ]
   }
-] as const;
+];
 
 const mobileNavItems = [
-  { key: "overview", label: "Home", icon: Gauge },
-  { key: "order-wizard", label: "Start", icon: PlusCircle },
-  { key: "work-orders", label: "Work", icon: Columns3 },
-  { key: "check-in-wall", label: "Check-In", icon: ClipboardList },
-  { key: "order-history", label: "Orders", icon: History },
-  { key: "blank-order", label: "Quote", icon: FileText },
-  { key: "active-bays", label: "Bays", icon: PanelLeft },
-  { key: "inventory", label: "Inventory", icon: Boxes },
-  { key: "settings", label: "Settings", icon: Settings }
+  { key: "overview", label: "Home", icon: IconDashboard },
+  { key: "order-wizard", label: "Start", icon: IconStartTicket },
+  { key: "work-orders", label: "Work", icon: IconWorkOrders },
+  { key: "check-in-wall", label: "Check-In", icon: IconCheckInWall },
+  { key: "order-history", label: "Orders", icon: IconOrderManager },
+  { key: "blank-order", label: "Quote", icon: IconBlankOrder },
+  { key: "active-bays", label: "Bays", icon: IconActiveBays },
+  { key: "inventory", label: "Inventory", icon: IconInventory },
+  { key: "settings", label: "Settings", icon: IconSettings }
 ] as const;
 
 interface SidebarProps {
@@ -96,92 +103,149 @@ interface SidebarProps {
   onNavigate: (page: PageKey) => void;
 }
 
+function isActive(activePage: string, itemKey: string): boolean {
+  if (activePage === itemKey) return true;
+  if (activePage === "ticket-detail" && itemKey === "order-history") return true;
+  if ((activePage === "new-ticket" || activePage === "order-wizard") && itemKey === "order-history") return true;
+  return false;
+}
+
 export function Sidebar({ activePage, onNavigate }: SidebarProps) {
   const bridge = getElectronBridgeDebug();
   const [brand, setBrand] = useState(defaultBrand);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar_collapsed") === "true");
   const [canViewAdmin, setCanViewAdmin] = useState(true);
+
   useEffect(() => {
     const load = () => getBrandConfig().then(setBrand).catch(() => setBrand(defaultBrand));
     load();
     window.addEventListener(brandChangedEvent, load);
     return () => window.removeEventListener(brandChangedEvent, load);
   }, []);
+
   useEffect(() => {
-    const loadEmployee = () => getCurrentEmployee().then((employee) => setCanViewAdmin(hasPermission(employee.role, "admin.analytics_view"))).catch(() => setCanViewAdmin(true));
+    const loadEmployee = () =>
+      getCurrentEmployee()
+        .then((employee) => setCanViewAdmin(hasPermission(employee.role, "admin.analytics_view")))
+        .catch(() => setCanViewAdmin(true));
     loadEmployee();
     window.addEventListener("flynns-current-employee-changed", loadEmployee);
     return () => window.removeEventListener("flynns-current-employee-changed", loadEmployee);
   }, []);
+
   const toggleCollapsed = useCallback(() => {
     setCollapsed((value) => {
       localStorage.setItem("sidebar_collapsed", String(!value));
       return !value;
     });
   }, []);
+
   useEffect(() => {
     window.addEventListener("flynns-toggle-sidebar", toggleCollapsed);
     return () => window.removeEventListener("flynns-toggle-sidebar", toggleCollapsed);
   }, [toggleCollapsed]);
+
+  const expanded = !collapsed;
+
   return (
-    <aside className={`hidden shrink-0 flex-col bg-gradient-to-b from-[var(--pos-sidebar-light)] via-[var(--pos-sidebar)] to-[var(--pos-sidebar-dark)] py-4 text-white shadow-xl transition-[width] duration-200 lg:flex ${collapsed ? "w-[78px]" : "w-[78px] xl:w-[272px]"}`}>
+    <aside
+      className={`hidden shrink-0 flex-col bg-gradient-to-b from-[var(--pos-sidebar-light)] via-[var(--pos-sidebar)] to-[var(--pos-sidebar-dark)] py-4 text-white shadow-xl transition-[width] duration-200 lg:flex ${
+        collapsed ? "w-[74px]" : "w-[74px] xl:w-[260px]"
+      }`}
+    >
+      {/* Logo */}
       <button
         type="button"
         onClick={() => onNavigate("overview")}
-        className={`mx-auto mb-5 flex items-center justify-center rounded-2xl bg-white/15 text-white shadow-sm ring-1 ring-white/20 ${collapsed ? "h-14 w-14 p-2" : "h-14 w-14 p-2 xl:mx-4 xl:h-28 xl:w-auto xl:flex-col xl:px-4 xl:py-3"}`}
         title={brand.businessName}
+        className={`mx-3 mb-5 flex items-center rounded-2xl bg-white/12 ring-1 ring-white/20 transition hover:bg-white/18 ${
+          expanded ? "xl:mx-3 xl:flex-col xl:gap-1.5 xl:px-3 xl:py-3" : ""
+        } h-14 w-14 justify-center p-2 xl:h-auto xl:w-auto`}
       >
-        <BrandLogo brand={brand} size={collapsed ? "sm" : "sidebar"} className={collapsed ? "" : "xl:h-20"} />
-        <span className={`mt-2 text-center text-sm font-black leading-tight ${collapsed ? "hidden" : "hidden xl:block"}`}>{brand.businessName}<br /><span className="text-xs font-semibold text-blue-100">{brand.appName}</span></span>
+        <BrandLogo brand={brand} size={collapsed ? "sm" : "sidebar"} className={expanded ? "xl:h-16" : ""} />
+        <span className={`text-center text-sm font-black leading-tight text-white ${collapsed ? "hidden" : "hidden xl:block"}`}>
+          {brand.businessName}
+          <br />
+          <span className="text-[11px] font-semibold text-blue-100/80">{brand.appName}</span>
+        </span>
       </button>
-      <nav className="flex flex-1 flex-col gap-4 px-3">
+
+      {/* Nav */}
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2.5 pb-2">
         {navSections.map((section) => (
-          <div key={section.label} className="flex flex-col gap-2 border-b border-white/10 pb-4 last:border-b-0" aria-label={section.label}>
-            <div className={`px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-100/75 ${collapsed ? "hidden" : "hidden xl:block"}`}>{section.label}</div>
-            {section.items.filter((item) => item.key !== "reports" || canViewAdmin).map((item) => {
-              const Icon = item.icon;
-              const active =
-                activePage === item.key ||
-                (activePage === "ticket-detail" && item.key === "order-history") ||
-                ((activePage === "new-ticket" || activePage === "order-wizard") && item.key === "order-history");
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => onNavigate(item.key as PageKey)}
-                  className={`relative flex h-12 w-full items-center justify-center gap-3 rounded-2xl px-3 transition ${collapsed ? "" : "xl:justify-start"} ${
-                    active ? "bg-white text-[var(--pos-sidebar)] shadow-md" : "text-blue-50 hover:bg-white/12 hover:text-white"
-                  }`}
-                  title={item.label}
-                  aria-label={item.label}
-                >
-                  {active ? <span className="absolute left-0 h-7 w-1 rounded-r-full bg-white" /> : null}
-                  <Icon size={22} />
-                  <span className={`flex-1 text-left text-sm font-bold ${collapsed ? "hidden" : "hidden xl:block"}`}>{item.label}</span>
-                </button>
-              );
-            })}
+          <div key={section.label} className="mb-3">
+            <div className={`mb-1.5 px-3 text-[9.5px] font-bold uppercase tracking-[0.2em] text-blue-200/60 ${collapsed ? "hidden" : "hidden xl:block"}`}>
+              {section.label}
+            </div>
+            {section.items
+              .filter((item) => item.key !== "reports" || canViewAdmin)
+              .map((item) => {
+                const Icon = item.icon;
+                const active = isActive(activePage, item.key);
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => onNavigate(item.key as PageKey)}
+                    title={item.label}
+                    aria-label={item.label}
+                    className={`relative mb-0.5 flex h-11 w-full items-center gap-3 rounded-xl px-2.5 transition ${
+                      expanded ? "xl:justify-start" : "justify-center"
+                    } justify-center ${
+                      active
+                        ? "bg-white/95 text-[var(--pos-sidebar)] shadow-sm"
+                        : "text-blue-50/85 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-white" />
+                    )}
+                    <span className={`shrink-0 ${active ? "text-[var(--pos-sidebar)]" : ""}`}>
+                      <Icon size={20} />
+                    </span>
+                    <span className={`flex-1 text-left text-[13px] font-bold ${collapsed ? "hidden" : "hidden xl:block"}`}>
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
+            {/* Section divider */}
+            <div className="mt-2 border-t border-white/10" />
           </div>
         ))}
       </nav>
-      <div className={`mx-3 mt-4 rounded-2xl border border-white/20 bg-white/12 p-3 ${collapsed ? "hidden" : "hidden xl:block"}`}>
-        <div className="flex items-center gap-2 text-sm font-bold text-emerald-100"><Wifi size={16} /> Shop is Open</div>
-        <div className="mt-1 text-xs text-blue-100/80">{bridge.databaseAvailable ? "SQLite Connected" : "SQLite Bridge Missing"}</div>
+
+      {/* Shop status */}
+      <div className={`mx-2.5 mb-2 rounded-xl border border-white/15 bg-white/8 p-2.5 ${collapsed ? "hidden" : "hidden xl:block"}`}>
+        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300">
+          <Wifi size={13} /> Shop Open
+        </div>
+        <div className="mt-0.5 text-[10px] text-blue-200/70">
+          {bridge.databaseAvailable ? "SQLite Connected" : "Bridge Missing"}
+        </div>
       </div>
-      <div className={`mx-3 mt-3 rounded-2xl border border-white/20 bg-white/10 p-3 ${collapsed ? "hidden" : "hidden xl:block"}`}>
-        <div className="text-sm font-bold text-white">{brand.locationName || brand.businessName}</div>
-        <div className="mt-1 text-xs text-blue-100/80">Local desktop register</div>
-      </div>
-      <button type="button" onClick={toggleCollapsed} className="mx-auto mt-4 flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-blue-50 transition hover:bg-white/20 hover:text-white" title={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
-        {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+
+      {/* Collapse toggle */}
+      <button
+        type="button"
+        onClick={toggleCollapsed}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        className="mx-auto mt-2 flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/8 text-blue-100/70 transition hover:bg-white/15 hover:text-white"
+      >
+        {collapsed ? <ChevronsRight size={16} /> : <ChevronsLeft size={16} />}
       </button>
-      <div className="mx-auto mt-3 rounded-md bg-white/10 px-2 py-1 text-[10px] font-bold text-blue-100" title="App version">v0.2</div>
+      <div className="mx-auto mt-2 rounded px-2 py-0.5 text-[9px] font-bold text-blue-200/50">v0.2</div>
     </aside>
   );
 }
 
 export function BottomNav({ activePage, onNavigate }: SidebarProps) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--pos-border)] bg-white/95 px-2 py-2 shadow-[0_-12px_28px_rgba(14,27,51,.12)] backdrop-blur lg:hidden" aria-label="Primary navigation">
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--pos-border)] bg-white/95 px-2 py-1.5 shadow-[0_-8px_24px_rgba(14,27,51,0.10)] backdrop-blur lg:hidden"
+      aria-label="Primary navigation"
+    >
       <div className="mx-auto grid max-w-4xl grid-cols-4 gap-1 sm:grid-cols-8">
         {mobileNavItems.map((item) => {
           const Icon = item.icon;
@@ -194,13 +258,15 @@ export function BottomNav({ activePage, onNavigate }: SidebarProps) {
               key={item.key}
               type="button"
               onClick={() => onNavigate(item.key as PageKey)}
-              className={`flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-2xl px-1 text-[11px] font-black transition ${
-                active ? "bg-[var(--pos-blue)] text-white shadow-sm" : "text-[var(--pos-muted)] hover:bg-[var(--pos-blue-soft)] hover:text-[var(--pos-blue)]"
-              }`}
               aria-label={item.label}
               title={item.label}
+              className={`flex min-h-[56px] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-black transition ${
+                active
+                  ? "bg-[var(--pos-blue)] text-white"
+                  : "text-[var(--pos-muted)] hover:bg-[var(--pos-blue-soft)] hover:text-[var(--pos-blue)]"
+              }`}
             >
-              <Icon size={21} />
+              <Icon size={20} />
               <span className="truncate">{item.label}</span>
             </button>
           );

@@ -5,12 +5,12 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
+import { StatePicker } from "../components/vehicles/StatePicker";
 import { listActivePackages } from "../lib/db/repositories/packagesRepo";
 import { addQuoteItem, createQuote, getQuoteById, removeQuoteItem, saveQuote, updateQuote, updateQuoteItem, type QuoteItem, type QuoteWithItems } from "../lib/db/repositories/quotesRepo";
 import { searchInventoryAdvanced } from "../lib/db/repositories/inventoryRepo";
 import { calculateQuoteTotals } from "../lib/domain/quotes/quoteTotals";
 import { groupPackagesByCategory, PACKAGE_CATEGORY_ORDER } from "../lib/domain/packages/packageCategories";
-import { US_STATES } from "../lib/domain/vehicles/usStates";
 import { formatMoney } from "../lib/utils/money";
 import type { InventoryItem } from "../types/inventory";
 import type { ServicePackage } from "../types/servicePackage";
@@ -273,11 +273,7 @@ export function BlankOrderPage({ onConvertToTicket }: BlankOrderPageProps) {
                 <Input label="Model" value={info.vehicle_model} onChange={(event) => setInfo({ ...info, vehicle_model: event.target.value })} />
                 <Input label="VIN" value={info.vehicle_vin} onChange={(event) => setInfo({ ...info, vehicle_vin: event.target.value.toUpperCase() })} />
                 <Input label="Plate" value={info.vehicle_plate} onChange={(event) => setInfo({ ...info, vehicle_plate: event.target.value.toUpperCase() })} />
-                <label className="text-sm font-semibold text-[var(--pos-text)]">Plate State
-                  <select className="mt-2 h-12 w-full rounded-md border border-[var(--pos-border)] bg-white px-3 text-[var(--pos-text)]" value={info.vehicle_plate_state} onChange={(event) => setInfo({ ...info, vehicle_plate_state: event.target.value })}>
-                    {US_STATES.map((state) => <option key={state.code} value={state.code}>{state.code} - {state.name}</option>)}
-                  </select>
-                </label>
+                <StatePicker label="Plate State" value={info.vehicle_plate_state} onChange={(vehicle_plate_state) => setInfo({ ...info, vehicle_plate_state })} />
                 <Input label="Mileage" type="number" value={info.vehicle_mileage} onChange={(event) => setInfo({ ...info, vehicle_mileage: event.target.value })} />
               </div>
               <Input className="mt-4" label="Notes" value={info.notes} onChange={(event) => setInfo({ ...info, notes: event.target.value })} />

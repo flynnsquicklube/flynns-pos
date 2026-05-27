@@ -2,6 +2,8 @@ import { execute, query } from "../db/sqlite";
 import { createId } from "../utils/ids";
 import { nowIso } from "../utils/dates";
 import { addImportError, createImportBatch, finishImportBatch } from "../db/repositories/importRepo";
+import { findVehicleByPlate } from "../db/repositories/vehiclesRepo";
+import { normalizePlate, normalizePlateState } from "../domain/vehicles/plateUtils";
 import { cleanValue, normalizePhone, normalizeText, parseDateTime, parseDroptopCsv, parseMileage, parseMoney, splitList } from "./droptopCsvParser";
 import type { ImportErrorInfo, OrdersImportResult, OrdersPreview, ParsedCsvRow } from "./importTypes";
 import type { Customer } from "../../types/customer";
@@ -89,11 +91,11 @@ async function findVehicle(row: Record<string, string | null>): Promise<Vehicle 
     const rows = await query<Vehicle>("SELECT * FROM vehicles WHERE vin = ? AND deleted_at IS NULL", [vin]);
     if (rows[0]) return rows[0];
   }
-  const plate = cleanValue(row.License);
-  const state = cleanValue(row["Plate Region"]);
+  const plate = normalizePlate(row.License);
+  const state = normalizePlateState(row["Plate Region"]);
   if (plate && state) {
-    const rows = await query<Vehicle>("SELECT * FROM vehicles WHERE plate = ? AND plate_state = ? AND deleted_at IS NULL", [plate, state]);
-    if (rows[0]) return rows[0];
+    const vehicle = await findVehicleByPlate(plate, state);
+    if (vehicle) return vehicle;
   }
   return null;
 }
@@ -115,8 +117,8 @@ async function upsertVehicle(row: Record<string, string | null>, customerId: str
       id,
       customerId,
       cleanValue(row.VIN),
-      cleanValue(row.License),
-      cleanValue(row["Plate Region"]),
+      normalizePlate(row.License) || null,
+      normalizePlate(row.License) ? normalizePlateState(row["Plate Region"]) || null : null,
       parseMileage(row["Vehicle Year"]),
       cleanValue(row["Vehicle Make"]),
       cleanValue(row["Vehicle Model"]),

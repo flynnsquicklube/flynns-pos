@@ -4,7 +4,7 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
 import { formatPlateForDisplay, normalizePlate } from "../../lib/domain/vehicles/plateUtils";
-import { US_STATES } from "../../lib/domain/vehicles/usStates";
+import { StatePicker } from "../vehicles/StatePicker";
 import type { VehicleSearchResult } from "../../lib/db/repositories/vehiclesRepo";
 import type { Customer } from "../../types/customer";
 import type { Vehicle } from "../../types/vehicle";
@@ -53,12 +53,7 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
         <h1 className="mt-6 text-3xl font-bold text-[var(--pos-text)]">License Plate Search</h1>
         <p className="mt-2 text-sm text-[var(--pos-muted)]">Search local vehicle records by plate and state.</p>
         <div className="mx-auto mt-8 grid max-w-xl gap-3 text-left md:grid-cols-[160px_1fr]">
-          <label className="text-sm font-semibold text-[var(--pos-text)]">
-            State
-            <select className="mt-2 h-14 w-full rounded-md border border-[var(--brand-border)] bg-white px-3 text-lg font-semibold text-[var(--pos-text)] outline-none focus:border-[var(--brand-primary)] focus:ring-4 focus:ring-[var(--brand-primary-light)]" value={plateState} onChange={(event) => onStateChange(event.target.value)}>
-              {US_STATES.map((state) => <option key={state.code} value={state.code}>{state.code} - {state.name}</option>)}
-            </select>
-          </label>
+          <StatePicker label="State" value={plateState} onChange={onStateChange} defaultValue="OH" />
           <label className="text-sm font-semibold text-[var(--pos-text)]">
             License Plate
             <Input

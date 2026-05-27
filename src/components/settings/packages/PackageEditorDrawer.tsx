@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, GripVertical, Plus, Search, Trash2, X } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
+import { TouchSelect } from "../../ui/TouchSelect";
 import { PackagePreview } from "./PackagePreview";
 import { listActiveCatalogItems } from "../../../lib/db/repositories/catalogRepo";
 import { getPackageCategory, PACKAGE_CATEGORY_ORDER } from "../../../lib/domain/packages/packageCategories";
@@ -349,17 +350,18 @@ function Toggle({ label, description, checked, onChange }: { label: string; desc
 
 function SelectField({ label, value, options, onChange, allowCustom = false }: { label: string; value: string; options: string[]; onChange: (value: string) => void; allowCustom?: boolean }) {
   return (
-    <label className="block text-sm font-semibold text-[var(--pos-text)]">
-      <span>{label}</span>
-      <select
-        className="mt-2 min-h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-white px-3 text-sm font-semibold text-[var(--pos-text)] outline-none transition focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-[var(--pos-blue-soft)]"
+    <div className="block text-sm font-semibold text-[var(--pos-text)]">
+      <TouchSelect
+        label={label}
         value={options.includes(value) ? value : allowCustom && value ? "__custom" : value}
-        onChange={(event) => onChange(event.target.value === "__custom" ? value : event.target.value)}
-      >
-        <option value="">Select {label.toLowerCase()}</option>
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
-        {allowCustom && value && !options.includes(value) ? <option value="__custom">{value}</option> : null}
-      </select>
+        onChange={(next) => onChange(next === "__custom" ? value : next)}
+        options={[
+          ...options.map((option) => ({ value: option, label: option })),
+          ...(allowCustom && value && !options.includes(value) ? [{ value: "__custom", label: value }] : [])
+        ]}
+        placeholder={`Select ${label.toLowerCase()}`}
+        searchable
+      />
       {allowCustom ? (
         <input
           className="mt-2 min-h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-bg-soft)] px-3 text-sm font-semibold text-[var(--pos-text)] outline-none transition placeholder:text-[var(--pos-muted-2)] focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-[var(--pos-blue-soft)]"
@@ -368,7 +370,7 @@ function SelectField({ label, value, options, onChange, allowCustom = false }: {
           placeholder={`Custom ${label.toLowerCase()}`}
         />
       ) : null}
-    </label>
+    </div>
   );
 }
 

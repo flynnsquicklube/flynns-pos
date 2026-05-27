@@ -38,6 +38,7 @@ import { normalizePlate, normalizePlateState } from "../../lib/domain/vehicles/p
 import { applyDecodedVehicleToDraft, decodeVinWithFallback, isVinDecodeEnabled } from "../../lib/integrations/vinDecoder/vinDecoder.service";
 import { lookupPlateLocalFirst } from "../../lib/integrations/plateLookup/plateLookup.service";
 import { extractVinFromScannedText } from "../../lib/domain/vehicles/vinUtils";
+import { defaultBusinessProfile, getBusinessProfile } from "../../lib/config/businessProfile";
 import type { NormalizedVehicleDecode } from "../../lib/integrations/vinDecoder/vinDecoder.types";
 import type { ServiceCatalogItem } from "../../types/catalog";
 import type { PackageFilterType, ServicePackage } from "../../types/servicePackage";
@@ -49,7 +50,7 @@ import type { Customer } from "../../types/customer";
 import type { Vehicle } from "../../types/vehicle";
 import type { InventoryItem } from "../../types/inventory";
 import type { OilFilterSuggestion } from "../../lib/domain/services/oilFilterSuggestion";
-import type { VehicleInfoDefaultsInput } from "../../lib/db/repositories/vehicleInfoLookupRepo";
+import { saveVehicleInfoDefaults, type VehicleInfoDefaultsInput } from "../../lib/db/repositories/vehicleInfoLookupRepo";
 
 interface OrderWizardPageProps {
   onCreated: (ticketId: string) => void;
@@ -58,6 +59,16 @@ interface OrderWizardPageProps {
 }
 
 const stepOrder: WizardStep[] = ["vehicle", "specs", "customer", "servicing", "order"];
+
+function previousOilMatchesPackage(oilBrand: string | null | undefined, oilType: string | null | undefined, servicePackage: ServicePackage) {
+  const packageBrand = servicePackage.oil_brand?.trim().toLowerCase();
+  const previousBrand = oilBrand?.trim().toLowerCase();
+  if (packageBrand && previousBrand && !previousBrand.includes(packageBrand) && !packageBrand.includes(previousBrand)) return false;
+  const packageType = servicePackage.oil_type?.trim().toLowerCase();
+  const previousType = oilType?.trim().toLowerCase();
+  if (packageType && previousType && !previousType.includes(packageType) && !packageType.includes(previousType)) return false;
+  return true;
+}
 
 function buildPackageLines(input: {
   selectedPackage: ServicePackage | null;
@@ -214,6 +225,7 @@ function mergeLookupContextIntoSpecs(current: VehicleSpecsForm, input: {
 
 export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: OrderWizardPageProps) {
   const { state, setState, totals } = useOrderWizardState();
+  const [defaultPlateState, setDefaultPlateState] = useState(normalizePlateState(defaultBusinessProfile.state) || "OH");
   const [packages, setPackages] = useState<ServicePackage[]>([]);
   const [catalogItems, setCatalogItems] = useState<ServiceCatalogItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -349,6 +361,12 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
       };
     });
   };
+
+  useEffect(() => {
+    getBusinessProfile()
+      .then((profile) => setDefaultPlateState(normalizePlateState(profile.state) || "OH"))
+      .catch(() => setDefaultPlateState("OH"));
+  }, []);
 
   useEffect(() => {
     Promise.all([listActivePackages(), listActiveCatalogItems(), getSetting("tax_rate")])
@@ -535,7 +553,8 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
           if (current.step !== "servicing" || selectedPackage?.id !== activePackage.id) return current;
           if (!selectedPackage) return current;
           const nextActualQuarts = current.actualQuarts || (defaults.suggestedQuarts ? String(defaults.suggestedQuarts) : String(selectedPackage.included_quarts));
-          const nextOilType = current.specs.oil_type || defaults.oilType || selectedPackage.oil_type || "";
+          const canUsePreviousOil = previousOilMatchesPackage(defaults.previousService.oilBrand, defaults.previousService.oilType ?? defaults.oilType, selectedPackage);
+          const nextOilType = current.specs.oil_type || (canUsePreviousOil ? defaults.oilType : null) || selectedPackage.oil_type || "";
           return {
             ...current,
             actualQuarts: nextActualQuarts,
@@ -567,7 +586,10 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
             selectedOilName: current.selectedOilName ?? oilSuggestion.name ?? null,
             selectedOilSource: current.selectedOilSource ?? oilSuggestion.source,
             quartsSuggestionSource: defaults.quartsSource,
-            serviceDefaultsMessage: defaults.oilType ? "Oil type suggested from vehicle history." : "Oil type suggested from selected package."
+            serviceDefaults: defaults,
+            serviceDefaultsMessage: defaults.previousService.found
+              ? `Previous service setup found from ${defaults.previousService.sourceLabel}.`
+              : "No previous service data found. Use manual oil/filter lookup."
           };
         });
       })
@@ -609,8 +631,21 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
     const timer = window.setTimeout(() => {
       setPlatePartialSearching(true);
       findVehiclesByPlatePartial(plate, plateState, 8)
-        .then(setPlateMatches)
-        .catch(() => setPlateMatches([]))
+        .then((results) => {
+          if (import.meta.env.DEV) {
+            console.debug("[plate-search:partial]", {
+              plate,
+              state: plateState,
+              resultCount: results.length,
+              vehicleIds: results.map((vehicle) => vehicle.id)
+            });
+          }
+          setPlateMatches(results);
+        })
+        .catch((error: unknown) => {
+          if (import.meta.env.DEV) console.debug("[plate-search:partial:error]", error);
+          setPlateMatches([]);
+        })
         .finally(() => setPlatePartialSearching(false));
     }, 200);
     return () => window.clearTimeout(timer);
@@ -677,10 +712,10 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
       vehicleMethod: "plate",
       vehicleSubstep: "plate",
       plateInput: "",
-      plateState: current.plateState || "OH",
+      plateState: defaultPlateState,
       lookedUpVehicle: null,
       selectedVehicleId: null,
-      specs: { ...current.specs, plate: "", plate_state: current.plateState || "OH", mileage: "" },
+      specs: { ...current.specs, plate: "", plate_state: defaultPlateState, mileage: "" },
       validation: null
     }));
   };
@@ -706,7 +741,7 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
         transmission_style: "",
         vin: "",
         plate: "",
-        plate_state: current.plateState || "OH",
+        plate_state: defaultPlateState,
         mileage: "",
         oil_type: "",
         notes: ""
@@ -769,6 +804,14 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
         const result = await lookupPlateLocalFirst({ plate, state: plateState, country: "US", source: "start_ticket" });
         match = result.status === "found" && result.raw ? result.raw as Vehicle : await findVehicleByPlate(plate, plateState);
         const partialMatches = await findVehiclesByPlatePartial(plate, plateState, 8);
+        if (import.meta.env.DEV) {
+          console.debug("[plate-search:exact]", {
+            plate,
+            state: plateState,
+            resultCount: partialMatches.length + (match ? 1 : 0),
+            vehicleIds: [...(match ? [match.id] : []), ...partialMatches.map((vehicle) => vehicle.id)]
+          });
+        }
         setPlateMatches(match ? partialMatches.filter((vehicle) => vehicle.id !== match?.id) : partialMatches);
       } finally {
         setPlateLookupSearching(false);
@@ -1466,6 +1509,58 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
     });
   };
 
+  const applyPreviousOilSetupToWizard = () => {
+    setState((current) => {
+      const defaults = current.serviceDefaults;
+      if (!defaults?.previousService.found) return { ...current, serviceDefaultsMessage: "No previous service data found. Use manual oil/filter lookup." };
+      const suggestedQuarts = defaults.suggestedQuarts ?? defaults.previousService.actualQuarts ?? defaults.previousService.includedQuarts;
+      const previousOil = defaults.previousService.oilType ?? defaults.oilType ?? current.oilTypeOverride;
+      const selectedFilter = defaults.oilFilter.source !== "none" ? defaults.oilFilter : current.selectedOilFilter;
+      return {
+        ...current,
+        actualQuarts: suggestedQuarts ? String(suggestedQuarts) : current.actualQuarts,
+        oilTypeOverride: previousOil ?? current.oilTypeOverride,
+        specs: { ...current.specs, oil_type: previousOil ?? current.specs.oil_type },
+        selectedOilFilter: selectedFilter,
+        selectedOilFilterInventoryItemId: selectedFilter?.inventoryItemId ?? current.selectedOilFilterInventoryItemId,
+        selectedOilFilterSku: selectedFilter?.sku ?? selectedFilter?.productId ?? current.selectedOilFilterSku,
+        selectedOilFilterName: selectedFilter?.name ?? current.selectedOilFilterName,
+        selectedOilFilterBrand: selectedFilter?.brand ?? current.selectedOilFilterBrand,
+        selectedOilFilterRetailPrice: selectedFilter?.retailPrice ?? current.selectedOilFilterRetailPrice,
+        selectedOilFilterCost: selectedFilter?.cost ?? current.selectedOilFilterCost,
+        selectedOilFilterSource: selectedFilter?.source ?? current.selectedOilFilterSource,
+        filterChoice: selectedFilter?.inventoryItemId ? "inventory" : current.filterChoice,
+        serviceDefaultsMessage: "Previous oil setup applied. Verify oil, quarts, and filter before sending to bay.",
+        validation: null
+      };
+    });
+  };
+
+  const saveCurrentOilSetupAsVehicleDefaults = async () => {
+    const vehicleId = state.selectedVehicleId ?? state.lookedUpVehicle?.id;
+    if (!vehicleId) {
+      notify({ tone: "error", title: "No vehicle selected", message: "Select a vehicle before saving service defaults." });
+      return;
+    }
+    const existing = state.serviceDefaults?.previousService.source === "saved_vehicle_default" || Boolean(state.lookedUpVehicle?.oil_capacity || state.lookedUpVehicle?.oil_filter_sku || state.lookedUpVehicle?.oil_type);
+    if (existing && !window.confirm("Replace the saved service defaults for this vehicle?")) return;
+    const oilType = state.oilTypeOverride || state.specs.oil_type || state.selectedPackage?.oil_type || null;
+    const oilCapacity = Number(state.actualQuarts);
+    await saveVehicleInfoDefaults(vehicleId, {
+      oil_type: oilType,
+      oil_capacity: Number.isFinite(oilCapacity) && oilCapacity > 0 ? oilCapacity : null,
+      oil_filter_sku: state.selectedOilFilterSku ?? state.selectedOilFilter?.sku ?? state.selectedOilFilter?.productId ?? null,
+      oil_filter_inventory_item_id: state.selectedOilFilterInventoryItemId ?? state.selectedOilFilter?.inventoryItemId ?? null,
+      vehicle_info_notes: "Verified from Start Ticket service setup.",
+      vehicle_info_source_title: "Start Ticket verified oil setup"
+    });
+    notify({ tone: "success", title: "Vehicle defaults saved", message: "Oil capacity and filter will be suggested next visit." });
+    setState((current) => ({
+      ...current,
+      serviceDefaultsMessage: "Verified service defaults saved for this vehicle."
+    }));
+  };
+
   return (
     <>
     <OrderWizardShell currentStep={state.step} state={state} onStepClick={handleStepClick}>
@@ -1486,6 +1581,7 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
           oilTypeOverride={state.oilTypeOverride}
           selectedOilFilter={state.selectedOilFilter}
           oilFilterSuggestion={state.oilFilterSuggestion}
+          serviceDefaults={state.serviceDefaults}
           filterChoice={state.filterChoice}
           selectedOil={selectedOil}
           taxRate={state.taxRate}
@@ -1575,6 +1671,8 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
             oilTypeOverride: oil.formulation ?? oil.viscosity ?? current.oilTypeOverride,
             specs: { ...current.specs, oil_type: oil.formulation ?? oil.viscosity ?? current.specs.oil_type }
           }))}
+          onUsePreviousOilSetup={applyPreviousOilSetupToWizard}
+          onSaveVehicleDefaults={saveCurrentOilSetupAsVehicleDefaults}
           onAddPackage={addWorkflowPackageToInvoice}
         />
       ) : null}
@@ -1591,9 +1689,22 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
           onSelectVin={() => setState((current) => ({ ...current, activePopout: "vinLookup", vehicleMethod: "vin", vehicleSubstep: "vin", validation: null }))}
           onSelectPlate={() => {
             setPlateLookupSearched(false);
-            setState((current) => ({ ...current, activePopout: "plateLookup", vehicleMethod: "plate", vehicleSubstep: "plate", validation: null }));
+            setPlateMatches([]);
+            setPlatePartialSearching(false);
+            setState((current) => ({
+              ...current,
+              activePopout: "plateLookup",
+              vehicleMethod: "plate",
+              vehicleSubstep: "plate",
+              plateInput: "",
+              plateState: defaultPlateState,
+              lookedUpVehicle: null,
+              selectedVehicleId: null,
+              specs: { ...current.specs, plate: "", plate_state: defaultPlateState, mileage: "" },
+              validation: null
+            }));
           }}
-          onSelectManual={() => setState((current) => ({ ...current, selectedStartingPoint: "manual", activePopout: "manualVehicle", step: "specs", validation: null }))}
+          onSelectManual={() => setState((current) => ({ ...current, selectedStartingPoint: "manual", activePopout: "manualVehicle", step: "specs", specs: { ...current.specs, plate_state: defaultPlateState }, validation: null }))}
         />
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "vin" ? (
@@ -1650,12 +1761,18 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
             showInlineBack={false}
             onSearch={() => void applyVehicleLookup(state.plateInput, `No local vehicle found for ${normalizePlate(state.plateInput)} ${normalizePlateState(state.plateState)}.`)}
             onPreviewVehicle={(vehicle) => {
-              setState((current) => ({
-                ...current,
-                lookedUpVehicle: vehicle,
-                selectedVehicleId: vehicle.id,
-                validation: null
-              }));
+              void (async () => {
+                const customer = vehicle.customer_id ? await getCustomer(vehicle.customer_id) : null;
+                setState((current) => ({
+                  ...current,
+                  lookedUpVehicle: vehicle,
+                  selectedVehicleId: vehicle.id,
+                  selectedCustomer: customer ?? (current.customerFirstFlow ? current.selectedCustomer : null),
+                  selectedCustomerId: customer?.id ?? (current.customerFirstFlow ? current.selectedCustomerId : null),
+                  customerForm: customer ? emptyCustomerForm : current.customerForm,
+                  validation: null
+                }));
+              })();
             }}
             onUseExistingVehicle={(vehicle, mileage) => void handleExistingPlateVehicle(vehicle, mileage)}
             onContinue={continueWithNewPlateVehicle}
@@ -1676,6 +1793,7 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
             onPrevious={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : backWithinWorkflow}
             onNext={() => void handleSpecsNext()}
             onLookupVehicleInfo={() => setVehicleInfoLookupOpen(true)}
+            onScannedVin={(vin) => void handleScannedVin(vin)}
           />
         </StartTicketPopout>
       ) : null}

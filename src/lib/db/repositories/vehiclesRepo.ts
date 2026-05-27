@@ -1,7 +1,7 @@
 import { execute, query } from "../sqlite";
 import { createId } from "../../utils/ids";
 import { nowIso } from "../../utils/dates";
-import { normalizePlate, normalizePlateState } from "../../domain/vehicles/plateUtils";
+import { getPlateStateSearchValues, normalizePlate, normalizePlateState } from "../../domain/vehicles/plateUtils";
 import type { Vehicle, VehicleInput } from "../../../types/vehicle";
 import type { NormalizedVehicleDecode } from "../../integrations/vinDecoder/vinDecoder.types";
 
@@ -24,6 +24,14 @@ export interface VehicleSearchFilters {
   imported?: boolean;
   withHistory?: boolean;
   openTickets?: boolean;
+}
+
+function normalizedPlateSql(column: string) {
+  return `REPLACE(REPLACE(REPLACE(REPLACE(UPPER(COALESCE(${column}, '')), ' ', ''), '-', ''), '.', ''), '_', '')`;
+}
+
+function stateMatchesSql(column: string, stateValues: string[]) {
+  return `UPPER(TRIM(COALESCE(${column}, ''))) IN (${stateValues.map(() => "?").join(", ")})`;
 }
 
 export async function listVehicles(search = ""): Promise<Vehicle[]> {
@@ -65,23 +73,23 @@ export async function findVehicleByVin(vin: string): Promise<Vehicle | null> {
 
 export async function findVehicleByPlate(plate: string, state: string): Promise<Vehicle | null> {
   const normalizedPlate = normalizePlate(plate);
-  const normalizedState = normalizePlateState(state);
-  if (!normalizedPlate || !normalizedState) return null;
+  const stateValues = getPlateStateSearchValues(state);
+  if (!normalizedPlate || stateValues.length === 0) return null;
   const rows = await query<Vehicle>(
     `SELECT * FROM vehicles
      WHERE deleted_at IS NULL
-       AND REPLACE(REPLACE(UPPER(COALESCE(plate, '')), ' ', ''), '-', '') = ?
-       AND UPPER(COALESCE(plate_state, '')) = ?
+       AND ${normalizedPlateSql("plate")} = ?
+       AND ${stateMatchesSql("plate_state", stateValues)}
      ORDER BY updated_at DESC
      LIMIT 1`,
-    [normalizedPlate, normalizedState]
+    [normalizedPlate, ...stateValues]
   );
   return rows[0] ?? null;
 }
 
 export async function findVehiclesByPlatePartial(plate: string, state?: string | null, limit = 10): Promise<VehicleSearchResult[]> {
   const normalizedPlate = normalizePlate(plate);
-  const normalizedState = normalizePlateState(state);
+  const stateValues = getPlateStateSearchValues(state);
   if (!normalizedPlate) return [];
   const selectSql = `SELECT
        v.*,
@@ -89,24 +97,25 @@ export async function findVehiclesByPlatePartial(plate: string, state?: string |
        (SELECT MAX(service_date) FROM service_history h WHERE h.vehicle_id = v.id AND h.deleted_at IS NULL) AS last_visit
      FROM vehicles v
      LEFT JOIN customers c ON c.id = v.customer_id`;
-  const stateClause = "AND (? = '' OR UPPER(COALESCE(v.plate_state, '')) = ?)";
+  const stateClause = stateValues.length > 0 ? `AND ${stateMatchesSql("v.plate_state", stateValues)}` : "";
+  const normalizedPlateColumn = normalizedPlateSql("v.plate");
   const orderLimitSql = "ORDER BY v.updated_at DESC LIMIT ?";
   const prefixRows = await query<VehicleSearchResult>(
     `${selectSql}
      WHERE v.deleted_at IS NULL
-       AND REPLACE(REPLACE(UPPER(COALESCE(v.plate, '')), ' ', ''), '-', '') LIKE ?
+       AND ${normalizedPlateColumn} LIKE ?
        ${stateClause}
      ${orderLimitSql}`,
-    [`${normalizedPlate}%`, normalizedState, normalizedState, limit]
+    [`${normalizedPlate}%`, ...stateValues, limit]
   );
   if (prefixRows.length > 0 || normalizedPlate.length < 3) return prefixRows;
   return query<VehicleSearchResult>(
     `${selectSql}
      WHERE v.deleted_at IS NULL
-       AND REPLACE(REPLACE(UPPER(COALESCE(v.plate, '')), ' ', ''), '-', '') LIKE ?
+       AND ${normalizedPlateColumn} LIKE ?
        ${stateClause}
      ${orderLimitSql}`,
-    [`%${normalizedPlate}%`, normalizedState, normalizedState, limit]
+    [`%${normalizedPlate}%`, ...stateValues, limit]
   );
 }
 

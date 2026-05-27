@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Camera } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { Input } from "../ui/Input";
+import { VinCameraScannerModal } from "../scanner/VinCameraScannerModal";
+import { TouchSelect, type TouchSelectOption } from "../ui/TouchSelect";
 import { validateVehicleIdentifier } from "../../lib/domain/startTicket/startTicketValidation";
-import { US_STATES } from "../../lib/domain/vehicles/usStates";
+import { StatePicker } from "../vehicles/StatePicker";
+import { extractVinFromScannedText } from "../../lib/domain/vehicles/vinUtils";
 import { getOptionDetails, listMakesForYear, listModelsForYearMake, listOptionsForYearMakeModel, listYears } from "../../lib/integrations/vehicleCatalog/vehicleCatalog.service";
 import type { Customer } from "../../types/customer";
 import type { Vehicle } from "../../types/vehicle";
@@ -22,33 +26,7 @@ interface SpecsStepProps {
   onPrevious: () => void;
   onNext: () => void;
   onLookupVehicleInfo?: () => void;
-}
-
-interface SelectFieldProps {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-  required?: boolean;
-  helperText?: string;
-  children: ReactNode;
-}
-
-function SelectField({ label, value, onChange, disabled, required, helperText, children }: SelectFieldProps) {
-  return (
-    <label className="text-sm font-semibold text-[var(--pos-text)]">
-      {label}{required ? <span className="text-red-600"> *</span> : null}
-      <select
-        className="mt-2 h-12 w-full rounded-xl border border-[var(--brand-border)] bg-white px-3 text-sm font-semibold text-[var(--pos-text)] shadow-sm outline-none transition focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-[var(--pos-panel-2)] disabled:text-[var(--pos-muted)]"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {children}
-      </select>
-      {helperText ? <div className="mt-1 text-xs font-medium text-[var(--pos-muted)]">{helperText}</div> : null}
-    </label>
-  );
+  onScannedVin?: (vin: string) => void;
 }
 
 function optionLabel(option: VehicleCatalogOption) {
@@ -65,13 +43,18 @@ function normalizeKey(value: string | number | null | undefined) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matchedCustomer, nextLabel = "Next", showPreviousButton = true, onChange, onPrevious, onNext, onLookupVehicleInfo }: SpecsStepProps) {
+function toOptions<T>(items: T[], valueFor: (item: T) => string, labelFor: (item: T) => string): TouchSelectOption[] {
+  return items.map((item) => ({ value: valueFor(item), label: labelFor(item) }));
+}
+
+export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matchedCustomer, nextLabel = "Next", showPreviousButton = true, onChange, onPrevious, onNext, onLookupVehicleInfo, onScannedVin }: SpecsStepProps) {
   const [years, setYears] = useState<VehicleCatalogYear[]>([]);
   const [makes, setMakes] = useState<VehicleCatalogMake[]>([]);
   const [models, setModels] = useState<VehicleCatalogModel[]>([]);
   const [options, setOptions] = useState<VehicleCatalogOption[]>([]);
   const [selectedOptionId, setSelectedOptionId] = useState("");
   const [manualOverride, setManualOverride] = useState(false);
+  const [vinScannerOpen, setVinScannerOpen] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState<"years" | "makes" | "models" | "options" | null>(null);
   const [catalogMessage, setCatalogMessage] = useState<string | null>(null);
   const update = (key: keyof VehicleSpecsForm, value: string) => onChange({ ...specs, [key]: value });
@@ -246,6 +229,14 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
     return undefined;
   };
 
+  const handleScannedVin = (rawVin: string) => {
+    const extraction = extractVinFromScannedText(rawVin);
+    if (!extraction.isValid || !extraction.candidate) return;
+    setVinScannerOpen(false);
+    onChange({ ...specs, vin: extraction.candidate });
+    onScannedVin?.(extraction.candidate);
+  };
+
   return (
     <div className="flex justify-center">
       <Card className="w-full max-w-4xl p-8">
@@ -271,6 +262,7 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
                   {[matchedVehicle.year, matchedVehicle.make, matchedVehicle.model].filter(Boolean).join(" ") || "Saved vehicle"}
                 </div>
                 <div className="mt-2 grid gap-1 text-sm font-semibold text-[var(--pos-muted)] sm:grid-cols-2">
+                  {matchedVehicle.vin && specs.vin && matchedVehicle.vin === specs.vin ? <span className="text-amber-700">This VIN already exists.</span> : null}
                   <span>Customer: {matchedCustomer ? `${matchedCustomer.first_name} ${matchedCustomer.last_name}` : "No linked customer"}</span>
                   <span>Last mileage: {matchedVehicle.mileage?.toLocaleString() ?? "Not recorded"}</span>
                   <span>VIN: {matchedVehicle.vin ?? "Not recorded"}</span>
@@ -309,22 +301,10 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
             {catalogMessage ? <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{catalogMessage}</div> : null}
             {!manualOverride ? (
               <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <SelectField label="Year" value={specs.year} onChange={updateYear} required helperText={loadingCatalog === "years" ? "Loading years..." : undefined}>
-                  <option value="">Select year</option>
-                  {years.map((item) => <option key={item.year} value={item.year}>{item.year}</option>)}
-                </SelectField>
-                <SelectField label="Make" value={specs.make} onChange={updateMake} disabled={!specs.year || loadingCatalog === "makes"} required helperText={!specs.year ? "Select year first" : loadingCatalog === "makes" ? "Loading makes..." : undefined}>
-                  <option value="">{loadingCatalog === "makes" ? "Loading makes..." : "Select make"}</option>
-                  {makes.map((item) => <option key={item.makeName} value={item.makeName}>{item.makeName}</option>)}
-                </SelectField>
-                <SelectField label="Model" value={specs.model} onChange={updateModel} disabled={!specs.year || !specs.make || loadingCatalog === "models"} required helperText={!specs.make ? "Select make first" : loadingCatalog === "models" ? "Loading models..." : undefined}>
-                  <option value="">{loadingCatalog === "models" ? "Loading models..." : "Select model"}</option>
-                  {models.map((item) => <option key={item.modelName} value={item.modelName}>{item.modelName}</option>)}
-                </SelectField>
-                <SelectField label="Trim / Option" value={selectedOptionId} onChange={applyOption} disabled={!hasCatalogShape || loadingCatalog === "options"} helperText={loadingCatalog === "options" ? "Loading trim and engine options..." : options.length ? "Selecting an option fills engine details." : "No catalog option selected."}>
-                  <option value="">{options.length ? "Select trim / engine option" : "No options found"}</option>
-                  {options.map((item) => <option key={item.id} value={item.id}>{optionLabel(item)}</option>)}
-                </SelectField>
+                <TouchSelect label="Year *" value={specs.year} onChange={updateYear} options={toOptions(years, (item) => String(item.year), (item) => String(item.year))} placeholder="Select year" loading={loadingCatalog === "years"} helperText={loadingCatalog === "years" ? "Loading years..." : undefined} searchable />
+                <TouchSelect label="Make *" value={specs.make} onChange={updateMake} options={toOptions(makes, (item) => item.makeName, (item) => item.makeName)} placeholder={loadingCatalog === "makes" ? "Loading makes..." : "Select make"} disabled={!specs.year || loadingCatalog === "makes"} loading={loadingCatalog === "makes"} helperText={!specs.year ? "Select year first" : loadingCatalog === "makes" ? "Loading makes..." : undefined} searchable />
+                <TouchSelect label="Model *" value={specs.model} onChange={updateModel} options={toOptions(models, (item) => item.modelName, (item) => item.modelName)} placeholder={loadingCatalog === "models" ? "Loading models..." : "Select model"} disabled={!specs.year || !specs.make || loadingCatalog === "models"} loading={loadingCatalog === "models"} helperText={!specs.make ? "Select make first" : loadingCatalog === "models" ? "Loading models..." : undefined} searchable />
+                <TouchSelect label="Trim / Option" value={selectedOptionId} onChange={(value) => void applyOption(value)} options={toOptions(options, (item) => item.id, optionLabel)} placeholder={options.length ? "Select trim / engine option" : "No options found"} disabled={!hasCatalogShape || loadingCatalog === "options"} loading={loadingCatalog === "options"} helperText={loadingCatalog === "options" ? "Loading trim and engine options..." : options.length ? "Selecting an option fills engine details." : "No catalog option selected."} searchable />
                 <Input inputSize="touch" label="Trim / Submodel" value={specs.trim} onChange={(event) => update("trim", event.target.value)} placeholder="Optional" helperText={selectedOption ? `Source: ${selectedOption.source}` : undefined} />
                 <Input inputSize="touch" label="Engine" value={specs.engine} onChange={(event) => update("engine", event.target.value)} placeholder="Optional" />
                 <Input inputSize="touch" label="Drive" value={specs.drive_type} onChange={(event) => update("drive_type", event.target.value)} placeholder="Optional" />
@@ -372,15 +352,36 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
                 {(fields as typeof identificationFields).map((field) => (
                   field.key === "plate_state" ? (
                     <div key={field.key}>
-                      <SelectField
+                      <StatePicker
                         label={field.label}
                         required={field.required}
                         value={specs.plate_state}
                         onChange={(value) => update("plate_state", value)}
-                      >
-                        {US_STATES.map((state) => <option key={state.code} value={state.code}>{state.code} - {state.name}</option>)}
-                      </SelectField>
-                      {title === "Identification" && identificationFieldError(field.key) ? <div className="mt-1 text-xs font-bold text-red-600">{identificationFieldError(field.key)}</div> : null}
+                        errorText={title === "Identification" ? identificationFieldError(field.key) : undefined}
+                      />
+                    </div>
+                  ) : field.key === "vin" ? (
+                    <div key={field.key} className="md:col-span-2">
+                      <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                        <Input
+                          inputSize="touch"
+                          label={field.label}
+                          required={field.required}
+                          placeholder={field.placeholder ?? field.label}
+                          value={specs.vin}
+                          onChange={(event) => update("vin", event.target.value.toUpperCase())}
+                          errorText={title === "Identification" ? identificationFieldError(field.key) : undefined}
+                        />
+                        <Button
+                          type="button"
+                          size="touch"
+                          variant="secondary"
+                          icon={<Camera size={18} />}
+                          onClick={() => setVinScannerOpen(true)}
+                        >
+                          Scan VIN
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <Input
@@ -406,6 +407,12 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
           <Button disabled={!canAttemptContinue} onClick={onNext}>{nextLabel}</Button>
         </div>
       </Card>
+      {vinScannerOpen ? (
+        <VinCameraScannerModal
+          onClose={() => setVinScannerOpen(false)}
+          onVinScanned={handleScannedVin}
+        />
+      ) : null}
     </div>
   );
 }

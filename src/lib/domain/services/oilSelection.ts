@@ -39,8 +39,8 @@ export async function suggestEngineOil(vehicle: Vehicle | null, servicePackage: 
   const packageBrand = servicePackage.oil_brand?.trim().toLowerCase() ?? "";
   const packageType = servicePackage.oil_type?.trim() ?? "";
   const vehicleOil = vehicle?.oil_type?.trim() ?? "";
-  const searchText = [servicePackage.oil_brand, packageType, vehicleOil].filter(Boolean).join(" ");
-  const candidates = await searchEngineOil(searchText, packageType || vehicleOil, 12);
+  const searchText = [servicePackage.oil_brand, packageType, packageBrand ? null : vehicleOil].filter(Boolean).join(" ");
+  const candidates = await searchEngineOil(searchText, packageType || (!packageBrand ? vehicleOil : ""), 12);
   const packageBrandMatch = packageBrand
     ? candidates.find((item) => `${item.vendor ?? ""} ${item.brand ?? ""} ${item.name}`.toLowerCase().includes(packageBrand))
     : null;
@@ -49,7 +49,7 @@ export async function suggestEngineOil(vehicle: Vehicle | null, servicePackage: 
     : null;
   const selected = packageBrandMatch ?? packageTypeMatch ?? candidates[0];
   if (selected) {
-    return fromInventory(selected, packageBrandMatch || packageTypeMatch ? "package_default" : vehicle?.oil_type ? "vehicle_default" : "package_default", packageBrandMatch ? "Suggested from selected package brand." : packageTypeMatch ? "Suggested from selected package oil type." : vehicle?.oil_type ? "Suggested from vehicle oil type." : "Suggested from selected package.");
+    return fromInventory(selected, packageBrandMatch || packageTypeMatch || packageBrand ? "package_default" : vehicle?.oil_type ? "vehicle_default" : "package_default", packageBrandMatch ? "Suggested from selected package brand." : packageTypeMatch ? "Suggested from selected package oil type." : packageBrand ? "No exact package brand match found; verify before use." : vehicle?.oil_type ? "Suggested from vehicle oil type." : "Suggested from selected package.");
   }
   return {
     sku: undefined,

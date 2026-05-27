@@ -55,6 +55,7 @@ import { PackageEditorDrawer } from "../components/settings/packages/PackageEdit
 import { getPackageCategory, groupPackagesByCategory, PACKAGE_CATEGORY_ORDER, type PackageCategory } from "../lib/domain/packages/packageCategories";
 import { validateCriticalDroptopPackagePrices } from "../lib/domain/packages/packagePricingValidation";
 import { VinCameraScannerModal, type VinScannerResult } from "../components/scanner/VinCameraScannerModal";
+import { TouchSelect } from "../components/ui/TouchSelect";
 
 const tabs = ["Business Profile", "Tax", "Services", "Packages", "Import Data", "Printing", "Hardware", "Staff", "Audit Log", "Daily Closeout", "Loyalty Rules", "Database", "Theme/Branding", "Advanced"];
 
@@ -887,12 +888,7 @@ export function SettingsPage() {
               <Badge tone="blue">System Dialog Recommended</Badge>
             </div>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <label className="text-sm font-semibold text-[var(--pos-muted)]">Default print mode
-                <select className="mt-2 h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={printSettings.default_print_mode} onChange={(event) => setPrintSettings({ ...printSettings, default_print_mode: event.target.value as PrintSettings["default_print_mode"] })}>
-                  <option value="preview_only">Preview only</option>
-                  <option value="system_dialog">System dialog</option>
-                </select>
-              </label>
+              <TouchSelect label="Default print mode" value={printSettings.default_print_mode} onChange={(value) => setPrintSettings({ ...printSettings, default_print_mode: value as PrintSettings["default_print_mode"] })} options={[{ value: "preview_only", label: "Preview only" }, { value: "system_dialog", label: "System dialog" }]} />
               <Input label="Invoice template" value={printSettings.default_invoice_template} onChange={(event) => setPrintSettings({ ...printSettings, default_invoice_template: event.target.value })} />
               <Input label="Receipt template" value={printSettings.default_receipt_template} onChange={(event) => setPrintSettings({ ...printSettings, default_receipt_template: event.target.value })} />
             </div>
@@ -902,13 +898,7 @@ export function SettingsPage() {
             <h3 className="text-lg font-bold text-[var(--pos-text)]">Window Sticker / Godex RT200i</h3>
             <div className="mt-4 grid gap-4 md:grid-cols-4">
               <Input label="Printer model" value={printSettings.sticker_printer_model} onChange={(event) => setPrintSettings({ ...printSettings, sticker_printer_model: event.target.value })} />
-              <label className="text-sm font-semibold text-[var(--pos-muted)]">Language
-                <select className="mt-2 h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={printSettings.sticker_printer_language} onChange={(event) => setPrintSettings({ ...printSettings, sticker_printer_language: event.target.value as PrintSettings["sticker_printer_language"] })}>
-                  <option>EZPL</option>
-                  <option>GEPL</option>
-                  <option>GZPL</option>
-                </select>
-              </label>
+              <TouchSelect label="Language" value={printSettings.sticker_printer_language} onChange={(value) => setPrintSettings({ ...printSettings, sticker_printer_language: value as PrintSettings["sticker_printer_language"] })} options={["EZPL", "GEPL", "GZPL"].map((value) => ({ value, label: value }))} />
               <Input label="Width inches" type="number" step="0.0001" value={String(printSettings.sticker_width_inches)} onChange={(event) => setPrintSettings({ ...printSettings, sticker_width_inches: Number(event.target.value) || defaultPrintSettings.sticker_width_inches })} />
               <Input label="Height inches" type="number" step="0.01" value={String(printSettings.sticker_height_inches)} onChange={(event) => setPrintSettings({ ...printSettings, sticker_height_inches: Number(event.target.value) || defaultPrintSettings.sticker_height_inches })} />
               <Input label="DPI" type="number" value={String(printSettings.sticker_dpi)} onChange={(event) => setPrintSettings({ ...printSettings, sticker_dpi: Number(event.target.value) || defaultPrintSettings.sticker_dpi })} />
@@ -1009,14 +999,7 @@ export function SettingsPage() {
               <Input label="First name" value={employeeForm.first_name} onChange={(event) => setEmployeeForm({ ...employeeForm, first_name: event.target.value })} />
               <Input label="Last name" value={employeeForm.last_name} onChange={(event) => setEmployeeForm({ ...employeeForm, last_name: event.target.value })} />
               <Input label="Display name" value={employeeForm.display_name} onChange={(event) => setEmployeeForm({ ...employeeForm, display_name: event.target.value })} />
-              <label className="text-sm font-semibold text-[var(--pos-muted)]">Role
-                <select className="mt-2 h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={employeeForm.role} onChange={(event) => setEmployeeForm({ ...employeeForm, role: event.target.value as EmployeeRole })}>
-                  <option value="owner">Owner</option>
-                  <option value="manager">Manager</option>
-                  <option value="technician">Technician</option>
-                  <option value="cashier">Cashier</option>
-                </select>
-              </label>
+              <TouchSelect label="Role" value={employeeForm.role} onChange={(value) => setEmployeeForm({ ...employeeForm, role: value as EmployeeRole })} options={[{ value: "owner", label: "Owner" }, { value: "manager", label: "Manager" }, { value: "technician", label: "Technician" }, { value: "cashier", label: "Cashier" }]} />
               <Input label="Email" value={employeeForm.email} onChange={(event) => setEmployeeForm({ ...employeeForm, email: event.target.value })} />
               <Input label="Phone" value={employeeForm.phone} onChange={(event) => setEmployeeForm({ ...employeeForm, phone: event.target.value })} />
               <Input label="Hourly rate" type="number" value={employeeForm.hourly_rate} onChange={(event) => setEmployeeForm({ ...employeeForm, hourly_rate: event.target.value })} />
@@ -1532,17 +1515,12 @@ export function SettingsPage() {
             )}
             <div className="mt-5 grid gap-3 xl:grid-cols-[1fr_240px_auto]">
               <Input value={packageSearch} onChange={(event) => setPackageSearch(event.target.value)} placeholder="Search packages by name, oil brand, or oil type..." />
-              <label className="block text-sm font-semibold text-[var(--pos-text)]">
-                <span className="sr-only">Category filter</span>
-                <select
-                  className="min-h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-white px-3 text-sm font-semibold text-[var(--pos-text)] outline-none transition focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-[var(--pos-blue-soft)]"
-                  value={packageCategoryFilter}
-                  onChange={(event) => setPackageCategoryFilter(event.target.value as "all" | PackageCategory)}
-                >
-                  <option value="all">All Categories</option>
-                  {PACKAGE_CATEGORY_ORDER.map((category) => <option key={category} value={category}>{category}</option>)}
-                </select>
-              </label>
+              <TouchSelect
+                value={packageCategoryFilter}
+                onChange={(value) => setPackageCategoryFilter(value as "all" | PackageCategory)}
+                options={[{ value: "all", label: "All Categories" }, ...PACKAGE_CATEGORY_ORDER.map((category) => ({ value: category, label: category }))]}
+                searchable
+              />
               <div className="flex flex-wrap gap-2">
                 {(["all", "active", "inactive"] as const).map((filter) => (
                   <Button key={filter} variant={packageFilter === filter ? "primary" : "secondary"} onClick={() => setPackageFilter(filter)}>
@@ -1670,19 +1648,8 @@ export function SettingsPage() {
               <ThemeColorPicker label="Background" value={brandConfig.backgroundColor} onChange={(value) => setBrandConfig({ ...brandConfig, backgroundColor: value })} />
               <ThemeColorPicker label="Panel" value={brandConfig.panelColor} onChange={(value) => setBrandConfig({ ...brandConfig, panelColor: value })} />
               <ThemeColorPicker label="Card" value={brandConfig.cardColor} onChange={(value) => setBrandConfig({ ...brandConfig, cardColor: value })} />
-              <label className="text-sm font-semibold text-[var(--pos-muted)]">Mode
-                <select className="mt-2 h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={brandConfig.mode} onChange={(event) => setBrandConfig({ ...brandConfig, mode: event.target.value as BrandConfig["mode"] })}>
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
-                </select>
-              </label>
-              <label className="text-sm font-semibold text-[var(--pos-muted)]">Density
-                <select className="mt-2 h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={brandConfig.density} onChange={(event) => setBrandConfig({ ...brandConfig, density: event.target.value as BrandConfig["density"] })}>
-                  <option value="touch">Touch</option>
-                  <option value="comfortable">Comfortable</option>
-                  <option value="compact">Compact</option>
-                </select>
-              </label>
+              <TouchSelect label="Mode" value={brandConfig.mode} onChange={(value) => setBrandConfig({ ...brandConfig, mode: value as BrandConfig["mode"] })} options={[{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }]} />
+              <TouchSelect label="Density" value={brandConfig.density} onChange={(value) => setBrandConfig({ ...brandConfig, density: value as BrandConfig["density"] })} options={[{ value: "touch", label: "Touch" }, { value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]} />
               <Input label="Font family" value={brandConfig.fontFamily} onChange={(event) => setBrandConfig({ ...brandConfig, fontFamily: event.target.value })} />
             </div>
             <div className="mt-5 flex flex-wrap gap-3">

@@ -25,6 +25,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
+import { TouchSelect } from "../components/ui/TouchSelect";
 import { useToast } from "../components/ui/useToast";
 import { searchInventoryAdvanced, type InventorySearchFilters } from "../lib/db/repositories/inventoryRepo";
 import { createPaymentAndRefreshTicket, getPaymentsByTicket, getTicketPaymentSummary, type TicketPaymentSummary } from "../lib/db/repositories/paymentsRepo";
@@ -1032,34 +1033,11 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
         >
           <div className="grid gap-4">
             {addItemMode === "fee" ? (
-              <label className="block text-sm font-semibold text-[var(--pos-text)]">
-                Fee type
-                <select className="mt-2 h-12 w-full rounded-xl border border-[var(--pos-border)] bg-white px-3" value={lineForm.name} onChange={(event) => setLineForm({ ...lineForm, name: event.target.value })}>
-                  <option>Shop Fee</option>
-                  <option>Environmental Fee</option>
-                  <option>Disposal Fee</option>
-                  <option>Misc Fee</option>
-                </select>
-              </label>
+              <TouchSelect label="Fee type" value={lineForm.name} onChange={(name) => setLineForm({ ...lineForm, name })} options={["Shop Fee", "Environmental Fee", "Disposal Fee", "Misc Fee"].map((item) => ({ value: item, label: item }))} />
             ) : addItemMode === "discount" ? (
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-sm font-semibold text-[var(--pos-text)]">
-                  Discount type
-                  <select className="mt-2 h-12 w-full rounded-xl border border-[var(--pos-border)] bg-white px-3" value={lineForm.discountType} onChange={(event) => setLineForm({ ...lineForm, discountType: event.target.value as "dollar" | "percent" })}>
-                    <option value="dollar">Dollar Amount</option>
-                    <option value="percent">Percent</option>
-                  </select>
-                </label>
-                <label className="block text-sm font-semibold text-[var(--pos-text)]">
-                  Reason
-                  <select className="mt-2 h-12 w-full rounded-xl border border-[var(--pos-border)] bg-white px-3" value={lineForm.name} onChange={(event) => setLineForm({ ...lineForm, name: event.target.value })}>
-                    <option>Manager Discount</option>
-                    <option>Coupon Match</option>
-                    <option>Customer Satisfaction</option>
-                    <option>Employee</option>
-                    <option>Other Discount</option>
-                  </select>
-                </label>
+                <TouchSelect label="Discount type" value={lineForm.discountType} onChange={(discountType) => setLineForm({ ...lineForm, discountType: discountType as "dollar" | "percent" })} options={[{ value: "dollar", label: "Dollar Amount" }, { value: "percent", label: "Percent" }]} />
+                <TouchSelect label="Reason" value={lineForm.name} onChange={(name) => setLineForm({ ...lineForm, name })} options={["Manager Discount", "Coupon Match", "Customer Satisfaction", "Employee", "Other Discount"].map((item) => ({ value: item, label: item }))} />
               </div>
             ) : (
               <Input label={addItemMode === "labor" ? "Labor description" : "Item name"} inputSize="touch" value={lineForm.name} onChange={(event) => setLineForm({ ...lineForm, name: event.target.value })} />

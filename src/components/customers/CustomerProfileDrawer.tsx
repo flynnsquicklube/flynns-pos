@@ -3,6 +3,7 @@ import { Car, ClipboardList, Gift, History, LayoutDashboard, StickyNote, Ticket,
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { TouchSelect } from "../ui/TouchSelect";
 import { formatMoney } from "../../lib/utils/money";
 import type { Customer } from "../../types/customer";
 import type { Vehicle } from "../../types/vehicle";
@@ -354,6 +355,17 @@ export function CustomerProfileDrawer({
                             <span>Filter: {vehicle.oil_filter_sku ?? "—"}</span>
                             <span>Capacity: {vehicle.oil_capacity ? `${vehicle.oil_capacity} qt` : "—"}</span>
                           </div>
+                          <div className="mt-3 rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-3 text-xs text-[var(--pos-muted)]">
+                            <span className="font-black uppercase tracking-wide text-[var(--pos-text)]">Service Defaults</span>
+                            <span className="ml-2">
+                              {vehicle.oil_type || vehicle.oil_capacity || vehicle.oil_filter_sku
+                                ? `${vehicle.oil_type || "Oil not saved"} · ${vehicle.oil_capacity ? `${vehicle.oil_capacity} qt` : "Capacity not saved"} · ${vehicle.oil_filter_sku ?? "Filter not saved"}`
+                                : "No verified defaults saved"}
+                            </span>
+                            <span className="ml-2">
+                              {vehicle.vehicle_info_verified_at ? `Verified ${new Date(vehicle.vehicle_info_verified_at).toLocaleDateString()}` : "Not verified"}
+                            </span>
+                          </div>
                           {punchRow ? (
                             <div className="mt-3">
                               <PunchDots count={punch?.punch_count ?? 0} />
@@ -386,14 +398,14 @@ export function CustomerProfileDrawer({
             <div className="rounded-2xl border border-[var(--pos-border)] bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-lg font-black text-[var(--pos-text)]">Service History</h3>
-                <select
-                  className="h-10 rounded-xl border border-[var(--pos-border)] bg-white px-3 text-sm font-bold"
-                  value={historyVehicleId}
-                  onChange={(event) => setHistoryVehicleId(event.target.value)}
-                >
-                  <option value="all">All Vehicles</option>
-                  {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicleLabel(vehicle)}</option>)}
-                </select>
+                <div className="w-64">
+                  <TouchSelect
+                    value={historyVehicleId}
+                    onChange={setHistoryVehicleId}
+                    options={[{ value: "all", label: "All Vehicles" }, ...vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicleLabel(vehicle) }))]}
+                    searchable
+                  />
+                </div>
               </div>
               <div className="mt-4 overflow-hidden rounded-xl border border-[var(--pos-border)]">
                 <table className="w-full min-w-[560px] text-sm">

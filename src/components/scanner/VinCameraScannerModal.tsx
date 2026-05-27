@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Camera, CheckCircle2, Flashlight, Pause, Play, RotateCcw, ScanLine, X } from "lucide-react";
 import { BarcodeFormat, BrowserCodeReader, BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
 import { Button } from "../ui/Button";
+import { TouchSelect } from "../ui/TouchSelect";
 import { extractVinFromScannedText, type VinExtractionResult } from "../../lib/domain/vehicles/vinUtils";
 import { scanVinTextFromImage, type VinOcrScanResult } from "../../lib/scanner/vinOcrScanner";
 
@@ -715,20 +716,17 @@ export function VinCameraScannerModal({ onClose, onVinScanned }: VinCameraScanne
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-[1fr] md:items-end">
-                <label className="block text-sm font-semibold text-[var(--pos-text)]">
-                  Camera
-                  <select
-                    className="mt-2 min-h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-white px-3 text-sm font-semibold text-[var(--pos-text)] outline-none focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-[var(--pos-blue-soft)]"
-                    value={selectedDeviceId ?? ""}
-                    onChange={(event) => {
-                      const nextDevice = event.target.value || undefined;
-                      setSelectedDeviceId(nextDevice);
-                      void startScanner(nextDevice, engineChoice);
-                    }}
-                  >
-                    {devices.length ? devices.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{cameraLabel(device, index)}</option>) : <option value="">Default camera</option>}
-                  </select>
-                </label>
+                <TouchSelect
+                  label="Camera"
+                  value={selectedDeviceId ?? ""}
+                  onChange={(value) => {
+                    const nextDevice = value || undefined;
+                    setSelectedDeviceId(nextDevice);
+                    void startScanner(nextDevice, engineChoice);
+                  }}
+                  options={devices.length ? devices.map((device, index) => ({ value: device.deviceId, label: cameraLabel(device, index) })) : [{ value: "", label: "Default camera" }]}
+                  searchable
+                />
               </div>
 
               <div className="relative overflow-hidden rounded-3xl border border-[var(--pos-border)] bg-slate-950 shadow-inner">
@@ -781,22 +779,22 @@ export function VinCameraScannerModal({ onClose, onVinScanned }: VinCameraScanne
               <details className="rounded-2xl border border-[var(--pos-border)] bg-white p-4" open={diagnosticsOpen} onToggle={(event) => setDiagnosticsOpen(event.currentTarget.open)}>
                 <summary className="cursor-pointer text-sm font-black uppercase tracking-wide text-[var(--pos-text)]">Scanner Diagnostics</summary>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  <label className="block text-sm font-semibold text-[var(--pos-text)] sm:col-span-2">
-                    Scanner Engine
-                    <select
-                      className="mt-2 min-h-11 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-white px-3 text-sm font-semibold text-[var(--pos-text)] outline-none focus:border-[var(--pos-blue)]"
+                  <div className="sm:col-span-2">
+                    <TouchSelect
+                      label="Scanner Engine"
                       value={engineChoice}
-                      onChange={(event) => {
-                        const nextEngine = event.target.value as ScannerEngine;
+                      onChange={(value) => {
+                        const nextEngine = value as ScannerEngine;
                         setEngineChoice(nextEngine);
                         void startScanner(selectedDeviceId, nextEngine);
                       }}
-                    >
-                      <option value="auto">Auto</option>
-                      <option value="native">Native BarcodeDetector</option>
-                      <option value="zxing">ZXing</option>
-                    </select>
-                  </label>
+                      options={[
+                        { value: "auto", label: "Auto" },
+                        { value: "native", label: "Native BarcodeDetector" },
+                        { value: "zxing", label: "ZXing" }
+                      ]}
+                    />
+                  </div>
                   <Button size="sm" variant="secondary" icon={<RotateCcw size={16} />} onClick={() => void startScanner()}>Restart Scanner</Button>
                   <Button size="sm" variant="secondary" icon={scannerActive ? <Pause size={16} /> : <Play size={16} />} onClick={togglePaused}>{status === "paused" ? "Resume" : "Pause"}</Button>
                   <Button size="sm" variant="secondary" disabled={!torchAvailable} icon={<Flashlight size={16} />} onClick={() => void toggleTorch()}>{torchOn ? "Torch Off" : "Torch"}</Button>

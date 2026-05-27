@@ -2,12 +2,14 @@ import { ArrowLeft, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { TouchSelect } from "../ui/TouchSelect";
 import { formatMoney } from "../../lib/utils/money";
 import { searchEngineOil, searchOilFilters } from "../../lib/db/repositories/inventoryRepo";
 import { calculatePackagePricing } from "../../lib/utils/pricing";
 import { getPackageWorkflowValidation } from "../../lib/domain/packages/packageValidation";
 import { inventoryItemToOilSelectionSuggestion, type OilSelectionSuggestion } from "../../lib/domain/services/oilSelection";
 import type { OilFilterSuggestion } from "../../lib/domain/services/oilFilterSuggestion";
+import type { VehicleServiceDefaultsResult } from "../../lib/domain/vehicles/vehicleServiceDefaults";
 import type { Customer } from "../../types/customer";
 import type { InventoryItem } from "../../types/inventory";
 import type { PackageFilterType, ServicePackage } from "../../types/servicePackage";
@@ -24,6 +26,7 @@ interface PackageWorkflowScreenProps {
   oilTypeOverride: string;
   selectedOilFilter: OilFilterSuggestion | null;
   oilFilterSuggestion: OilFilterSuggestion | null;
+  serviceDefaults: VehicleServiceDefaultsResult | null;
   filterChoice: "inventory" | "suggested" | "manual" | "customer_supplied" | "no_filter" | "standard_unmatched" | null;
   selectedOil: OilSelectionSuggestion | null;
   taxRate: number;
@@ -35,6 +38,8 @@ interface PackageWorkflowScreenProps {
   onCustomerSuppliedFilter: () => void;
   onNoFilter: () => void;
   onSelectOil: (oil: OilSelectionSuggestion) => void;
+  onUsePreviousOilSetup: () => void;
+  onSaveVehicleDefaults: () => void;
   onAddPackage: () => void;
 }
 
@@ -52,6 +57,12 @@ function filterFromInventory(item: InventoryItem, source: "manual" | "suggested"
     confidence: "high",
     message: source === "manual" ? "Manually selected from local inventory." : "Suggested from local inventory."
   };
+}
+
+function formatShortDate(value: string | null | undefined) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not recorded" : date.toLocaleDateString();
 }
 
 export function PackageWorkflowScreen(props: PackageWorkflowScreenProps) {
@@ -86,6 +97,10 @@ const selectedOilType = props.oilTypeOverride || props.specs.oil_type || props.s
   const canAddPackage = missing.length === 0;
   const suggestedFilter = props.oilFilterSuggestion?.source !== "none" ? props.oilFilterSuggestion : null;
   const displayedFilter = props.filterChoice === "customer_supplied" || props.filterChoice === "no_filter" || props.filterChoice === "standard_unmatched" ? null : props.selectedOilFilter ?? suggestedFilter;
+  const previousService = props.serviceDefaults?.previousService ?? null;
+  const previousOilLabel = previousService?.found
+    ? [previousService.oilBrand, previousService.oilType, previousService.viscosity && previousService.viscosity !== previousService.oilType ? previousService.viscosity : null].filter(Boolean).join(" · ") || "Oil type not recorded"
+    : null;
   const filterOperationComplete = Boolean(
     props.filterChoice === "customer_supplied" ||
       props.filterChoice === "no_filter" ||
@@ -123,7 +138,39 @@ const selectedOilType = props.oilTypeOverride || props.specs.oil_type || props.s
           </div>
         </div>
 
+        <div className={`rounded-2xl border p-4 ${previousService?.found ? "border-[var(--pos-blue)] bg-[var(--pos-blue-soft)]" : "border-[var(--pos-border)] bg-[var(--pos-panel)]"}`}>
+          {previousService?.found ? (
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-sm font-black uppercase tracking-wide text-[var(--pos-blue-2)]">Previous Service Found</div>
+                <div className="mt-2 grid gap-2 text-sm text-[var(--pos-text)] sm:grid-cols-2">
+                  <div><span className="font-black">Last serviced:</span> {formatShortDate(previousService.lastServiceDate)}{previousService.lastServiceMileage ? ` at ${previousService.lastServiceMileage.toLocaleString()} mi` : ""}</div>
+                  <div><span className="font-black">Package:</span> {previousService.packageName ?? "Not recorded"}</div>
+                  <div><span className="font-black">Oil:</span> {previousOilLabel}</div>
+                  <div><span className="font-black">Capacity used:</span> {previousService.actualQuarts ? `${previousService.actualQuarts} qt` : "Not recorded"}</div>
+                  <div><span className="font-black">Filter:</span> {previousService.filterSku ?? previousService.filterName ?? props.oilFilterSuggestion?.sku ?? props.oilFilterSuggestion?.name ?? "Not recorded"}</div>
+                  <div><span className="font-black">Source:</span> {previousService.sourceLabel} · {previousService.confidence}</div>
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button size="sm" onClick={props.onUsePreviousOilSetup}>Use Previous Oil Setup</Button>
+                <Button size="sm" variant="secondary" onClick={() => document.getElementById("oil-package-flow")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Edit</Button>
+                <Button size="sm" variant="ghost" onClick={props.onSaveVehicleDefaults}>Save as Vehicle Defaults</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <div>
+                <div className="font-black text-[var(--pos-text)]">No previous oil setup found for this vehicle.</div>
+                <div className="mt-1 text-[var(--pos-muted)]">Use manual oil/filter lookup.</div>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => document.getElementById("oil-package-flow")?.scrollIntoView({ behavior: "smooth", block: "start" })}>Manual Lookup</Button>
+            </div>
+          )}
+        </div>
+
         <ServiceOperationPanel title="Step 1: Confirm Oil Type" complete={Boolean(selectedOilType || props.selectedOil)}>
+          <div id="oil-package-flow" />
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,1fr)]">
             <div>
               <div className="text-sm font-black uppercase tracking-wide text-[var(--pos-muted)]">Selected package</div>
@@ -179,19 +226,17 @@ const selectedOilType = props.oilTypeOverride || props.specs.oil_type || props.s
 
         <ServiceOperationPanel title="Step 3: Confirm Oil Filter" complete={filterOperationComplete}>
           <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
-            <label className="block text-sm font-semibold text-[var(--pos-text)]">
-              Filter type
-              <select
-                className="mt-2 h-12 w-full rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-base text-[var(--pos-text)] outline-none transition focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-[var(--pos-blue-soft)]"
-                value={props.filterType}
-                onChange={(event) => props.onFilterTypeChange(event.target.value as PackageFilterType)}
-              >
-                <option value="standard">Standard filter</option>
-                <option value="cartridge">Cartridge filter</option>
-                <option value="customer_supplied">Customer supplied filter</option>
-                <option value="none">No filter</option>
-              </select>
-            </label>
+            <TouchSelect
+              label="Filter type"
+              value={props.filterType}
+              onChange={(value) => props.onFilterTypeChange(value as PackageFilterType)}
+              options={[
+                { value: "standard", label: "Standard filter" },
+                { value: "cartridge", label: "Cartridge filter" },
+                { value: "customer_supplied", label: "Customer supplied filter" },
+                { value: "none", label: "No filter" }
+              ]}
+            />
             <div className="flex flex-wrap content-start gap-2 text-xs font-black uppercase tracking-wide text-[var(--pos-muted)]">
               <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1">Saved vehicle default</span>
               <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1">Previous service history</span>

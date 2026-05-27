@@ -6,6 +6,7 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
+import { TouchSelect } from "../components/ui/TouchSelect";
 import { useToast } from "../components/ui/useToast";
 import {
   countInventorySearchResults,
@@ -437,14 +438,11 @@ function AdjustQuantityModal({ item, onClose, onSaved }: { item: InventoryItem; 
         </Card>
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-2">
-        <label className="block text-sm font-semibold text-[var(--pos-text)]">
-          Adjustment type
-          <select className="mt-2 h-12 w-full rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={movementType} onChange={(event) => setMovementType(event.target.value as InventoryMovementType)}>
-            <option value="add">Add stock</option>
-            <option value="remove">Remove stock</option>
-            <option value="set">Set exact quantity</option>
-          </select>
-        </label>
+        <TouchSelect label="Adjustment type" value={movementType} onChange={(value) => setMovementType(value as InventoryMovementType)} options={[
+          { value: "add", label: "Add stock" },
+          { value: "remove", label: "Remove stock" },
+          { value: "set", label: "Set exact quantity" }
+        ]} />
         <div>
           <Input label="Quantity" inputSize="touch" type="number" step="0.1" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
           <div className="mt-2 grid grid-cols-4 gap-2">
@@ -460,12 +458,7 @@ function AdjustQuantityModal({ item, onClose, onSaved }: { item: InventoryItem; 
             ))}
           </div>
         </div>
-        <label className="block text-sm font-semibold text-[var(--pos-text)]">
-          Reason
-          <select className="mt-2 h-12 w-full rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={reason} onChange={(event) => setReason(event.target.value)}>
-            {movementReasons.map((option) => <option key={option}>{option}</option>)}
-          </select>
-        </label>
+        <TouchSelect label="Reason" value={reason} onChange={setReason} options={movementReasons.map((option) => ({ value: option, label: option }))} />
         <Input label="Notes" inputSize="touch" value={notes} onChange={(event) => setNotes(event.target.value)} />
       </div>
       <div className="mt-5 flex justify-end gap-3">
@@ -643,15 +636,12 @@ function CountSheetsPanel({ canAdjust }: { canAdjust: boolean }) {
         <p className="mt-1 text-sm text-[var(--pos-muted)]">Create local counts, enter counted quantities, then apply adjustments when approved.</p>
         <div className="mt-4 grid gap-3">
           <Input label="Sheet name" value={name} onChange={(event) => setName(event.target.value)} />
-          <label className="text-sm font-semibold text-[var(--pos-text)]">
-            Count type
-            <select className="mt-2 h-12 w-full rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={filterType} onChange={(event) => setFilterType(event.target.value as CountSheetFilter)}>
-              <option value="oil_filters">Oil Filters</option>
-              <option value="engine_oil">Engine Oil</option>
-              <option value="low_stock">Low Stock</option>
-              <option value="all">All Inventory</option>
-            </select>
-          </label>
+          <TouchSelect label="Count type" value={filterType} onChange={(value) => setFilterType(value as CountSheetFilter)} options={[
+            { value: "oil_filters", label: "Oil Filters" },
+            { value: "engine_oil", label: "Engine Oil" },
+            { value: "low_stock", label: "Low Stock" },
+            { value: "all", label: "All Inventory" }
+          ]} />
           <Button disabled={loading || !name.trim()} onClick={create}>New Count Sheet</Button>
         </div>
         <div className="mt-5 space-y-2">
@@ -760,10 +750,7 @@ function PurchaseOrdersPanel() {
         <h2 className="text-xl font-black text-[var(--pos-text)]">Purchase Orders</h2>
         <p className="mt-1 text-sm text-[var(--pos-muted)]">Local purchasing workflow. No accounting integration yet.</p>
         <div className="mt-4 grid gap-3">
-          <select className="h-12 rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-[var(--pos-text)]" value={supplierId} onChange={(event) => setSupplierId(event.target.value)}>
-            <option value="">No supplier selected</option>
-            {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
-          </select>
+          <TouchSelect value={supplierId} onChange={setSupplierId} options={suppliers.map((supplier) => ({ value: supplier.id, label: supplier.name }))} placeholder="No supplier selected" clearable searchable />
           <Button onClick={create}>New Purchase Order</Button>
         </div>
         <div className="mt-5 space-y-2">

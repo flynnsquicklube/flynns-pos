@@ -76,6 +76,7 @@ export function useOrderWizardState() {
     selectedOilSource: null,
     quartsSuggestionSource: null,
     serviceDefaultsMessage: null,
+    serviceDefaults: null,
     selectedCatalogItems: [],
     customLine: { name: "", quantity: "1", unit_price: "", taxable: true },
     customerConcern: "",

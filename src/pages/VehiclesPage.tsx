@@ -5,6 +5,7 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
+import { TouchSelect } from "../components/ui/TouchSelect";
 import { VehicleInfoLookupModal } from "../components/vehicle-info/VehicleInfoLookupModal";
 import { applyVehicleDecode, countVehicleSearchResults, createVehicle, getVehicleById, getVehicleStats, searchVehiclesAdvanced, updateVehicle, type VehicleQuickFilter, type VehicleSearchFilters, type VehicleSearchResult, type VehicleStats } from "../lib/db/repositories/vehiclesRepo";
 import { searchCustomersAdvanced } from "../lib/db/repositories/customersRepo";
@@ -16,7 +17,7 @@ import type { Customer } from "../types/customer";
 import type { TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
 import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
-import { US_STATES } from "../lib/domain/vehicles/usStates";
+import { StatePicker } from "../components/vehicles/StatePicker";
 import { decodeVinWithFallback, isVinDecodeEnabled } from "../lib/integrations/vinDecoder/vinDecoder.service";
 import type { NormalizedVehicleDecode } from "../lib/integrations/vinDecoder/vinDecoder.types";
 import { isFuelEconomyEnabled, searchEpaVehicleCandidates } from "../lib/integrations/fuelEconomy/fuelEconomy.service";
@@ -353,22 +354,13 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
             <Button onClick={() => { if (selected) setStartTicketContext({ vehicleId: selected.id, customerId: selected.customer_id, source: "vehicle_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <label className="text-sm font-semibold text-[var(--pos-text)]">Owner
-              <select className="mt-2 h-11 w-full rounded-md border border-[var(--pos-border)] bg-white px-3 text-[var(--pos-text)]" value={form.customer_id} onChange={(event) => setForm({ ...form, customer_id: event.target.value })}>
-                <option value="">Select customer</option>
-                {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.first_name} {customer.last_name}</option>)}
-              </select>
-            </label>
+            <TouchSelect label="Owner" value={form.customer_id} onChange={(customer_id) => setForm({ ...form, customer_id })} options={customers.map((customer) => ({ value: customer.id, label: `${customer.first_name} ${customer.last_name}`.trim() || "Unnamed customer", description: customer.phone || customer.email || undefined }))} placeholder="Select customer" searchable />
             <Input label="Year" value={form.year} onChange={(event) => setForm({ ...form, year: event.target.value })} />
             <Input label="Make" value={form.make} onChange={(event) => setForm({ ...form, make: event.target.value })} />
             <Input label="Model" value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} />
             <Input label="VIN" value={form.vin} onChange={(event) => setForm({ ...form, vin: event.target.value })} />
             <Input label="Plate" value={form.plate} onChange={(event) => setForm({ ...form, plate: event.target.value.toUpperCase() })} />
-            <label className="text-sm font-semibold text-[var(--pos-text)]">State
-              <select className="mt-2 h-11 w-full rounded-md border border-[var(--pos-border)] bg-white px-3 text-[var(--pos-text)]" value={form.plate_state} onChange={(event) => setForm({ ...form, plate_state: event.target.value })}>
-                {US_STATES.map((state) => <option key={state.code} value={state.code}>{state.code} - {state.name}</option>)}
-              </select>
-            </label>
+            <StatePicker label="State" value={form.plate_state} onChange={(plate_state) => setForm({ ...form, plate_state })} />
             <Input label="Mileage" value={form.mileage} onChange={(event) => setForm({ ...form, mileage: event.target.value })} />
             <Input label="Oil type" value={form.oil_type} onChange={(event) => setForm({ ...form, oil_type: event.target.value })} />
             <Input className="md:col-span-3" label="Notes" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />

@@ -5,6 +5,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
 import { PosMetricCard } from "../components/pos";
+import { IconActiveBays, IconBlankOrder, IconPaymentManager, IconStartTicket, IconWorkOrders } from "../components/ui/PosNavIcons";
 import { getTodayDashboardMetrics, listActiveTickets, type DashboardMetrics } from "../lib/db/repositories/ticketsRepo";
 import { getDisplayInvoiceNumber } from "../lib/domain/invoices/invoiceNumber";
 import { formatMoney } from "../lib/utils/money";
@@ -125,21 +126,21 @@ export function OverviewPage({ onStartTicket, onOpenBays, onOpenOrders, onOpenIn
       <Card className="p-6">
         <h2 className="text-xl font-black text-[var(--pos-text)]">Quick Actions</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
-          {[
-            { label: "Start Ticket", description: "New service ticket", color: "bg-[var(--pos-blue)]", onClick: onStartTicket },
-            { label: "Work Orders", description: "Today's board", color: "bg-[var(--pos-blue-2)]", onClick: onOpenWorkOrders },
-            { label: "Active Bays", description: "Bay 1 & Bay 2", color: "bg-[#0E1B33]", onClick: onOpenBays },
-            { label: "Payment Manager", description: "Collect payments", color: "bg-[var(--pos-success)]", onClick: onOpenPaymentManager },
-            { label: "Blank Order", description: "Quote / estimate", color: "bg-[var(--pos-muted)]", onClick: onOpenBlankOrder }
-          ].map((action) => (
+          {([
+            { label: "Start Ticket", description: "New service ticket", iconBg: "bg-[var(--pos-blue)]", Icon: IconStartTicket, onClick: onStartTicket },
+            { label: "Work Orders", description: "Today's board", iconBg: "bg-indigo-600", Icon: IconWorkOrders, onClick: onOpenWorkOrders },
+            { label: "Active Bays", description: "Bay 1 & Bay 2", iconBg: "bg-[#0E1B33]", Icon: IconActiveBays, onClick: onOpenBays },
+            { label: "Payment Manager", description: "Collect payments", iconBg: "bg-amber-500", Icon: IconPaymentManager, onClick: onOpenPaymentManager },
+            { label: "Blank Order", description: "Quote / estimate", iconBg: "bg-purple-600", Icon: IconBlankOrder, onClick: onOpenBlankOrder }
+          ] as const).map((action) => (
             <button
               key={action.label}
               type="button"
               onClick={action.onClick}
               className="group flex flex-col gap-3 rounded-[var(--pos-radius-lg)] border border-[var(--pos-border)] bg-[var(--pos-card)] p-4 text-left shadow-[var(--pos-shadow-card)] transition hover:-translate-y-0.5 hover:border-[var(--pos-border-strong)] hover:shadow-[0_18px_40px_rgba(14,27,51,0.12)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--pos-blue-soft)]"
             >
-              <span className={`flex h-10 w-10 items-center justify-center rounded-[var(--pos-radius-md)] ${action.color}`}>
-                <span className="text-white text-lg font-black leading-none">{action.label[0]}</span>
+              <span className={`flex h-11 w-11 items-center justify-center rounded-[var(--pos-radius-md)] ${action.iconBg} text-white`}>
+                <action.Icon size={22} />
               </span>
               <span>
                 <span className="block text-sm font-black text-[var(--pos-text)]">{action.label}</span>

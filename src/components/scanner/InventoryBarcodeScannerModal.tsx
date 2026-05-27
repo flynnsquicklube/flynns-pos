@@ -3,6 +3,7 @@ import { Camera, ScanLine, X } from "lucide-react";
 import { BarcodeFormat, BrowserCodeReader, BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { TouchSelect } from "../ui/TouchSelect";
 
 type ScannerStatus = "idle" | "requesting_permission" | "scanning" | "found" | "denied" | "no_camera" | "error";
 
@@ -321,17 +322,15 @@ export function InventoryBarcodeScannerModal({ onClose, onBarcodeScanned, title 
           <div className="flex items-center justify-between">
             <span className="text-sm text-[var(--pos-muted)]">{statusText[status]}</span>
             {devices.length > 1 ? (
-              <select
-                className="h-9 rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] px-2 text-xs font-semibold text-[var(--pos-text)]"
+              <div className="w-52">
+                <TouchSelect
+                size="md"
                 value={selectedDeviceId ?? ""}
-                onChange={(event) => { const id = event.target.value; setSelectedDeviceId(id); void startScanner(id); }}
-              >
-                {devices.map((device, index) => (
-                  <option key={device.deviceId} value={device.deviceId}>
-                    {device.label || `Camera ${index + 1}`}
-                  </option>
-                ))}
-              </select>
+                onChange={(id) => { setSelectedDeviceId(id); void startScanner(id); }}
+                options={devices.map((device, index) => ({ value: device.deviceId, label: device.label || `Camera ${index + 1}` }))}
+                searchable
+              />
+              </div>
             ) : null}
           </div>
 

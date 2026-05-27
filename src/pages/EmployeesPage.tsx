@@ -4,6 +4,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
+import { TouchSelect } from "../components/ui/TouchSelect";
 import { useToast } from "../components/ui/useToast";
 import { listEmployees, type Employee } from "../lib/db/repositories/employeesRepo";
 import {
@@ -90,12 +91,7 @@ export function EmployeesPage() {
             <Badge tone={statusTone}>{status.replace("_", " ")}</Badge>
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-[1fr_220px]">
-            <label className="text-sm font-semibold text-[var(--pos-text)]">
-              Employee
-              <select className="mt-2 h-14 w-full rounded-[var(--pos-radius-lg)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-4 text-lg font-bold text-[var(--pos-text)]" value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
-                {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.display_name} · {employee.role}</option>)}
-              </select>
-            </label>
+            <TouchSelect label="Employee" value={selectedEmployeeId} onChange={setSelectedEmployeeId} options={employees.map((employee) => ({ value: employee.id, label: employee.display_name, description: employee.role }))} searchable />
             <div className="rounded-[var(--pos-radius-lg)] border border-[var(--pos-border)] bg-[var(--pos-bg-soft)] p-4">
               <div className="text-xs font-bold uppercase tracking-wide text-[var(--pos-muted)]">Current status</div>
               <div className="mt-2 text-2xl font-black text-[var(--pos-text)]">{status.replace("_", " ")}</div>

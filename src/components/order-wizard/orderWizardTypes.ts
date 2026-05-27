@@ -3,6 +3,7 @@ import type { PackageFilterType, ServicePackage } from "../../types/servicePacka
 import type { TicketLineInput } from "../../types/ticket";
 import type { Vehicle } from "../../types/vehicle";
 import type { OilFilterSuggestion } from "../../lib/domain/services/oilFilterSuggestion";
+import type { VehicleServiceDefaultsResult } from "../../lib/domain/vehicles/vehicleServiceDefaults";
 
 export type WizardStep = "vehicle" | "specs" | "customer" | "servicing" | "order";
 export type VehicleMethod = "vin" | "plate" | null;
@@ -90,6 +91,7 @@ export interface OrderWizardState {
   selectedOilSource: "vehicle_default" | "last_service" | "package_default" | "manual" | "none" | null;
   quartsSuggestionSource: "vehicle_default" | "last_service" | "package_default" | null;
   serviceDefaultsMessage: string | null;
+  serviceDefaults: VehicleServiceDefaultsResult | null;
   selectedCatalogItems: TicketLineInput[];
   customLine: CustomLineForm;
   customerConcern: string;
