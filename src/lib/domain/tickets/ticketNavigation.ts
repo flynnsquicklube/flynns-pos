@@ -33,7 +33,15 @@ function normalizeRouteStateDestination(routeState?: TicketRouteState | null): T
 
 export function getTicketBackDestination(ticket: Pick<TicketWithDetails, "status"> | null | undefined, routeState?: TicketRouteState | null): TicketBackDestination {
   const routeDestination = normalizeRouteStateDestination(routeState);
-  if (routeDestination) return routeDestination;
+  if (routeDestination) {
+    if (ticket?.status === "in_service" && routeDestination.path === "/waiting-payment") {
+      return safeDestinations["/active-bays"];
+    }
+    if (ticket?.status === "waiting_payment" && routeDestination.path === "/active-bays") {
+      return safeDestinations["/waiting-payment"];
+    }
+    return routeDestination;
+  }
 
   if (ticket?.status === "checked_in") {
     return safeDestinations["/check-in-wall"];

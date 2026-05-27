@@ -138,9 +138,12 @@ export function ServicingStep(props: ServicingStepProps) {
       <div className="min-w-0 space-y-5">
         <Card className="p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-black text-[var(--pos-text)]">Servicing</h1>
-              <p className="mt-1 max-w-2xl text-sm text-[var(--pos-muted)]">Select an oil package, configure quarts/filter, then add services or fees.</p>
+            <div className="flex items-start gap-3">
+              <Button variant="secondary" size="sm" onClick={props.onPrevious}>Back</Button>
+              <div>
+                <h1 className="text-2xl font-black text-[var(--pos-text)]">Servicing</h1>
+                <p className="mt-1 max-w-2xl text-sm text-[var(--pos-muted)]">Select an oil package, configure quarts/filter, then add services or fees.</p>
+              </div>
             </div>
             <div className="rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel-2)] px-4 py-3 text-sm">
               <div className="font-bold text-[var(--pos-text)]">{props.selectedCustomer ? `${props.selectedCustomer.first_name} ${props.selectedCustomer.last_name}` : "Customer pending"}</div>

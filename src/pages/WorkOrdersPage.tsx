@@ -4,6 +4,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { cancelDraft, listActiveOrderDrafts, type OrderDraft } from "../lib/db/repositories/orderDraftsRepo";
 import { getWorkOrdersForDate, type WorkOrderTicketSummary, type WorkOrdersForDate } from "../lib/db/repositories/ticketsRepo";
 import { getWorkOrderStatusLabel, getWorkOrderStatusPillVariant, type WorkOrderColumnKey } from "../lib/domain/tickets/workOrderStatus";
 import { todayIsoDate } from "../lib/utils/dates";
@@ -11,6 +12,7 @@ import { formatMoney } from "../lib/utils/money";
 
 interface WorkOrdersPageProps {
   onOpenTicket: (ticketId: string) => void;
+  onContinueDraft: (draftId: string) => void;
 }
 
 const emptyBoard: WorkOrdersForDate = { open: [], inBay: [], serviceComplete: [], finalized: [] };
@@ -63,6 +65,41 @@ function formatMileage(value: number | null | undefined) {
 
 function joinDetails(parts: Array<string | null | undefined>) {
   return parts.filter(Boolean).join(" · ");
+}
+
+function parseDraftSummary(draft: OrderDraft): { customerName?: string | null; vehicleLabel?: string | null; packageName?: string | null; summary?: string | null; currentStep?: string | null } {
+  if (!draft.summary_json) return {};
+  try {
+    return JSON.parse(draft.summary_json) as { customerName?: string | null; vehicleLabel?: string | null; packageName?: string | null; summary?: string | null; currentStep?: string | null };
+  } catch {
+    return {};
+  }
+}
+
+function DraftCard({ draft, onContinueDraft, onCancel }: { draft: OrderDraft; onContinueDraft: (draftId: string) => void; onCancel: (draftId: string) => void }) {
+  const summary = parseDraftSummary(draft);
+  return (
+    <article className="rounded-2xl border border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-black uppercase tracking-wide text-[var(--pos-blue-2)]">Draft Order</div>
+          <div className="mt-1 text-lg font-black text-[var(--pos-text)]">{draft.draft_number}</div>
+          <div className="mt-1 text-sm font-semibold text-[var(--pos-muted)]">Updated {displayTime(draft.updated_at)}</div>
+        </div>
+        <Badge tone="blue">Continue</Badge>
+      </div>
+      <div className="mt-3 space-y-1 text-sm text-[var(--pos-muted)]">
+        <div className="font-black text-[var(--pos-text)]">{summary.customerName ?? "Customer not selected"}</div>
+        <div>{summary.vehicleLabel ?? "Vehicle not selected"}</div>
+        <div>{summary.packageName ?? summary.summary ?? "Order started"}</div>
+        <div className="text-xs font-bold uppercase tracking-wide text-[var(--pos-blue-2)]">Step: {summary.currentStep ?? draft.current_step}</div>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto]">
+        <Button onClick={() => onContinueDraft(draft.id)}>Continue Order</Button>
+        <Button variant="secondary" onClick={() => onCancel(draft.id)}>Cancel Draft</Button>
+      </div>
+    </article>
+  );
 }
 
 function TicketCard({ ticket, onOpenTicket }: { ticket: WorkOrderTicketSummary; onOpenTicket: (ticketId: string) => void }) {
@@ -138,22 +175,33 @@ function TicketCard({ ticket, onOpenTicket }: { ticket: WorkOrderTicketSummary; 
   );
 }
 
-export function WorkOrdersPage({ onOpenTicket }: WorkOrdersPageProps) {
+export function WorkOrdersPage({ onOpenTicket, onContinueDraft }: WorkOrdersPageProps) {
   const [selectedDate, setSelectedDate] = useState(todayIsoDate());
   const [board, setBoard] = useState<WorkOrdersForDate>(emptyBoard);
+  const [drafts, setDrafts] = useState<OrderDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    getWorkOrdersForDate(selectedDate)
-      .then(setBoard)
+    Promise.all([getWorkOrdersForDate(selectedDate), listActiveOrderDrafts()])
+      .then(([nextBoard, nextDrafts]) => {
+        setBoard(nextBoard);
+        setDrafts(nextDrafts);
+      })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to load work orders."))
       .finally(() => setLoading(false));
   }, [selectedDate]);
 
-  const totalCount = useMemo(() => Object.values(board).reduce((sum, rows) => sum + rows.length, 0), [board]);
+  const totalCount = useMemo(() => Object.values(board).reduce((sum, rows) => sum + rows.length, 0) + drafts.length, [board, drafts.length]);
+
+  const cancelOrderDraft = async (draftId: string) => {
+    const confirmed = window.confirm("Cancel this draft order?");
+    if (!confirmed) return;
+    await cancelDraft(draftId);
+    setDrafts((current) => current.filter((draft) => draft.id !== draftId));
+  };
 
   return (
     <section className="space-y-5">
@@ -180,6 +228,23 @@ export function WorkOrdersPage({ onOpenTicket }: WorkOrdersPageProps) {
 
       {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div> : null}
       {!loading && totalCount === 0 ? <EmptyState title="No work orders for this date." message="Tickets created or completed on the selected day will appear here." /> : null}
+
+      {!loading && drafts.length > 0 ? (
+        <Card className="overflow-hidden border-t-4 border-t-[var(--pos-blue)]">
+          <div className="border-b border-[var(--pos-border)] bg-[var(--pos-blue-soft)] px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black text-[var(--pos-text)]">Continue Orders</h2>
+                <p className="mt-1 text-sm font-semibold text-[var(--pos-muted)]">Draft orders saved from in-progress Start Ticket workflows.</p>
+              </div>
+              <Badge tone="blue">{drafts.length}</Badge>
+            </div>
+          </div>
+          <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+            {drafts.map((draft) => <DraftCard key={draft.id} draft={draft} onContinueDraft={onContinueDraft} onCancel={cancelOrderDraft} />)}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="-mx-2 overflow-x-auto px-2 pb-3">
         <div className="grid min-w-[1320px] grid-cols-4 gap-5 2xl:min-w-0">

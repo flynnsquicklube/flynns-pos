@@ -30,7 +30,7 @@ import { searchInventoryAdvanced, type InventorySearchFilters } from "../lib/db/
 import { createPaymentAndRefreshTicket, getPaymentsByTicket, getTicketPaymentSummary, type TicketPaymentSummary } from "../lib/db/repositories/paymentsRepo";
 import { listPrintJobsByTicket } from "../lib/db/repositories/printJobsRepo";
 import { getServiceHistoryByVehicle } from "../lib/db/repositories/serviceHistoryRepo";
-import { addTicketItem, cancelTicket, finalizeTicket, getTicketById, markWaitingPayment, removeTicketItem, reopenTicket, startService, updateTicketItem, updateTicketItemQuantity, updateTicketNotes } from "../lib/db/repositories/ticketsRepo";
+import { addTicketItem, cancelTicket, finalizeTicket, getTicketById, listActiveTickets, markWaitingPayment, removeTicketItem, reopenTicket, sendTicketToBay, updateTicketItem, updateTicketItemQuantity, updateTicketNotes } from "../lib/db/repositories/ticketsRepo";
 import { getSetting } from "../lib/db/repositories/settingsRepo";
 import { applyCouponToTicket, getTicketCouponApplications, listActiveCouponsByCustomer, removeCouponFromTicket, type TicketCouponApplication } from "../lib/db/repositories/couponsRepo";
 import { createFreeOilChangeCoupon, getPunchCardByVehicle, type VehiclePunchCard } from "../lib/db/repositories/punchCardsRepo";
@@ -62,6 +62,7 @@ interface TicketDetailPageProps {
 
 type DetailTab = "invoice" | "payments" | "history" | "notes" | "internal";
 type AddItemMode = "inventory" | "labor" | "discount" | "coupon" | "fee" | "custom" | null;
+type BayName = "Bay 1" | "Bay 2";
 
 const statusLabels: Record<TicketStatus, string> = {
   draft: "Draft",
@@ -108,10 +109,12 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>("invoice");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [bayModalOpen, setBayModalOpen] = useState(false);
+  const [activeBayTickets, setActiveBayTickets] = useState<TicketWithDetails[]>([]);
+  const [selectedBay, setSelectedBay] = useState<BayName>("Bay 1");
   const [paymentSummary, setPaymentSummary] = useState<TicketPaymentSummary | null>(null);
   const [finalMileage, setFinalMileage] = useState("");
   const [oilType, setOilType] = useState("");
-  const [bay, setBay] = useState("Bay 1");
   const [history, setHistory] = useState<ServiceHistory[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [activeCoupons, setActiveCoupons] = useState<CustomerCouponRecord[]>([]);
@@ -146,7 +149,6 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
         setTicket(result);
         setFinalMileage(result?.vehicle_mileage ? String(result.vehicle_mileage) : "");
         setOilType(result?.vehicle_oil_type ?? "");
-        if (result?.bay) setBay(result.bay);
         setNotesForm({
           customer_concern: result?.customer_concern ?? "",
           technician_notes: result?.technician_notes ?? "",
@@ -225,6 +227,12 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
   const backDestination = getTicketBackDestination(ticket, routeState);
   const activeApplications = couponApplications.filter((application) => application.status === "applied" || application.status === "redeemed");
   const canEditTicketItems = ticket.status !== "completed" && ticket.status !== "canceled" && displayPaymentStatus !== "paid";
+  const canUseBayAction = ticket.status !== "completed" && ticket.status !== "canceled";
+  const bayActionLabel = ticket.status === "waiting_payment" || (displayPaymentStatus === "paid" && ticket.status !== "completed" && ticket.status !== "canceled")
+    ? "Send Back to Bay"
+    : ticket.bay
+      ? "Move Bay"
+      : "Send to Bay";
 
   const resetAddItemState = () => {
     setAddItemMode(null);
@@ -415,18 +423,53 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
     void runAction(() => cancelTicket(ticket.id), "Ticket canceled.");
   };
 
+  const openBaySelection = async () => {
+    if (!canUseBayAction) return;
+    try {
+      const rows = await listActiveTickets();
+      setActiveBayTickets(rows);
+      const bayOptions: BayName[] = ["Bay 1", "Bay 2"];
+      const emptyTarget = bayOptions.find((option) => option !== ticket.bay && !rows.some((row) => row.status === "in_service" && row.bay === option && row.id !== ticket.id))
+        ?? bayOptions.find((option) => !rows.some((row) => row.status === "in_service" && row.bay === option && row.id !== ticket.id))
+        ?? "Bay 1";
+      setSelectedBay(emptyTarget);
+      setBayModalOpen(true);
+    } catch (err) {
+      notify({ tone: "error", title: "Unable to load bays", message: err instanceof Error ? err.message : "Try again from Active Bays." });
+    }
+  };
+
+  const assignSelectedBay = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await sendTicketToBay(ticket.id, selectedBay);
+      setBayModalOpen(false);
+      const message = bayActionLabel === "Move Bay" ? `Moved to ${selectedBay}.` : bayActionLabel === "Send Back to Bay" ? `Sent back to ${selectedBay}.` : `Sent to ${selectedBay}.`;
+      notify({ tone: "success", title: "Ticket updated", message });
+      const needsFirstSticker = bayActionLabel === "Send to Bay" && !ticket.bay && !printJobs.some((job) => job.document_type === "window_sticker");
+      loadTicket();
+      if (needsFirstSticker) void openPrintPreview("window_sticker");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to assign bay.";
+      setError(message);
+      notify({ tone: "error", title: "Bay assignment failed", message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderBayActionButton = (className = "") => {
+    if (!canUseBayAction) return null;
+    return <Button className={className} disabled={saving} icon={<Play size={16} />} onClick={() => void openBaySelection()}>{bayActionLabel}</Button>;
+  };
+
   const renderNextActionPanel = () => {
     if (ticket.status === "checked_in") {
       return (
         <div className="grid gap-3">
-          <label className="block text-sm font-semibold text-[var(--pos-text)]">
-            Assign bay
-            <select className="mt-2 h-12 w-full rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-card)] px-3 text-sm font-bold text-[var(--pos-text)]" value={bay} onChange={(event) => setBay(event.target.value)}>
-              <option>Bay 1</option>
-              <option>Bay 2</option>
-            </select>
-          </label>
-          <Button disabled={saving} size="touch" icon={<Play size={16} />} onClick={() => runAction(() => startService(ticket.id, bay), `${bay} assigned.`)}>Send to Bay</Button>
+          {renderBayActionButton("w-full")}
           <Button disabled={saving} variant="danger" icon={<XCircle size={16} />} onClick={confirmCancelTicket}>Cancel Ticket</Button>
         </div>
       );
@@ -434,6 +477,7 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
     if (ticket.status === "in_service") {
       return (
         <div className="grid gap-3">
+          {renderBayActionButton("w-full")}
           <Button disabled={saving} size="touch" icon={<CheckCircle2 size={16} />} onClick={() => runAction(() => markWaitingPayment(ticket.id), "Moved to waiting payment.")}>Mark Waiting Payment</Button>
           <Button variant="secondary" icon={<Printer size={16} />} onClick={() => void openPrintPreview("window_sticker")}>Reprint Sticker</Button>
           <Button disabled={saving} variant="danger" icon={<XCircle size={16} />} onClick={confirmCancelTicket}>Cancel Ticket</Button>
@@ -443,6 +487,7 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
     if (ticket.status === "waiting_payment" && displayPaymentStatus === "paid") {
       return (
         <div className="grid gap-3">
+          {renderBayActionButton("w-full")}
           <Button disabled={saving} size="touch" variant="success" icon={<CheckCircle2 size={16} />} onClick={finalizeOrder}>Finalize Order</Button>
           <Button variant="secondary" icon={<Printer size={16} />} onClick={() => void openPrintPreview("invoice")}>Print Invoice</Button>
           <Button variant="secondary" icon={<Printer size={16} />} onClick={() => void openPrintPreview("receipt")}>Print Receipt</Button>
@@ -452,6 +497,7 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
     if (ticket.status === "waiting_payment") {
       return (
         <div className="grid gap-3">
+          {renderBayActionButton("w-full")}
           <Button size="touch" icon={<CreditCard size={16} />} onClick={() => setPaymentModalOpen(true)}>Add Payment</Button>
           <Button variant="secondary" icon={<Printer size={16} />} onClick={() => void openPrintPreview("invoice")}>Print Invoice</Button>
           <Button variant="secondary" icon={<Printer size={16} />} onClick={() => void openPrintPreview("window_sticker")}>Reprint Sticker</Button>
@@ -499,6 +545,12 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
     );
   };
 
+  const bayOptions: BayName[] = ["Bay 1", "Bay 2"];
+  const getBayOccupant = (bayName: BayName) => activeBayTickets.find((row) => row.status === "in_service" && row.bay === bayName && row.id !== ticket.id) ?? null;
+  const selectedBayOccupant = getBayOccupant(selectedBay);
+  const selectedBayIsCurrent = ticket.status === "in_service" && ticket.bay === selectedBay;
+  const assignButtonLabel = bayActionLabel === "Move Bay" ? "Move to Bay" : "Assign to Bay";
+
   return (
     <section className="mx-auto max-w-[1480px] space-y-5">
       <Card className="no-print px-4 py-3 shadow-sm">
@@ -526,6 +578,7 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
       <Card className="no-print p-3">
         <div className="flex flex-wrap items-center gap-2">
           {renderAddItemMenu()}
+          {renderBayActionButton()}
           {ticket.status === "in_service" ? <Button disabled={saving} icon={<CheckCircle2 size={16} />} onClick={() => runAction(() => markWaitingPayment(ticket.id), "Moved to waiting payment.")}>Mark Waiting Payment</Button> : null}
           {ticket.status === "waiting_payment" && displayPaymentStatus !== "paid" ? <Button icon={<CreditCard size={16} />} onClick={() => setPaymentModalOpen(true)}>Add Payment</Button> : null}
           {ticket.status === "waiting_payment" && displayPaymentStatus === "paid" ? <Button disabled={saving} variant="success" icon={<CheckCircle2 size={16} />} onClick={finalizeOrder}>Finalize Order</Button> : null}
@@ -848,6 +901,74 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
           </Card>
         </aside>
       </div>
+
+      {bayModalOpen ? (
+        <Modal
+          title="Select Bay"
+          onClose={() => setBayModalOpen(false)}
+          footer={(
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="secondary" disabled={saving} onClick={() => setBayModalOpen(false)}>Cancel</Button>
+              <Button disabled={saving || Boolean(selectedBayOccupant) || selectedBayIsCurrent} icon={<Play size={16} />} onClick={() => void assignSelectedBay()}>
+                {assignButtonLabel}
+              </Button>
+            </div>
+          )}
+        >
+          <div className="space-y-4">
+            {ticket.status === "waiting_payment" || displayPaymentStatus === "paid" ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+                Payments stay on this invoice. Sending it back to a bay only changes the workflow status and bay assignment.
+              </div>
+            ) : null}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {bayOptions.map((bayName) => {
+                const occupant = getBayOccupant(bayName);
+                const isCurrent = ticket.status === "in_service" && ticket.bay === bayName;
+                const vehicleLabel = occupant ? [occupant.vehicle_year, occupant.vehicle_make, occupant.vehicle_model].filter(Boolean).join(" ") : "";
+                const customerLabel = occupant ? [occupant.customer_first_name, occupant.customer_last_name].filter(Boolean).join(" ") || "Walk-in" : "";
+                return (
+                  <button
+                    key={bayName}
+                    type="button"
+                    disabled={Boolean(occupant)}
+                    onClick={() => setSelectedBay(bayName)}
+                    className={`min-h-[160px] rounded-2xl border p-5 text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--pos-blue-soft)] disabled:cursor-not-allowed disabled:opacity-70 ${
+                      selectedBay === bayName
+                        ? "border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] shadow-sm"
+                        : "border-[var(--pos-border)] bg-[var(--pos-card)] hover:border-[var(--pos-blue)] hover:bg-[var(--pos-card-hover)]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xl font-black text-[var(--pos-text)]">{bayName}</div>
+                        <div className="mt-1 text-sm font-bold text-[var(--pos-muted)]">{occupant ? "Occupied" : isCurrent ? "Current bay" : "Empty"}</div>
+                      </div>
+                      <Badge tone={occupant ? "red" : isCurrent ? "blue" : "green"}>{occupant ? "Occupied" : isCurrent ? "Current" : "Open"}</Badge>
+                    </div>
+                    {occupant ? (
+                      <div className="mt-4 rounded-xl border border-[var(--pos-border)] bg-white/80 p-3">
+                        <div className="font-black text-[var(--pos-text)]">{customerLabel}</div>
+                        <div className="mt-1 text-sm text-[var(--pos-muted)]">{vehicleLabel || "Vehicle not set"}</div>
+                        <div className="mt-1 text-xs font-bold text-[var(--pos-muted)]">Invoice {getDisplayInvoiceNumber(occupant)}</div>
+                      </div>
+                    ) : (
+                      <div className="mt-4 text-sm font-semibold text-[var(--pos-muted)]">
+                        {isCurrent ? "This ticket is already assigned here." : "Available for this ticket."}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedBayOccupant ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{selectedBay} is already occupied.</div>
+            ) : selectedBayIsCurrent ? (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-700">This ticket is already in {selectedBay}. Select the other bay to move it.</div>
+            ) : null}
+          </div>
+        </Modal>
+      ) : null}
 
       {addItemMode === "inventory" ? (
         <Modal

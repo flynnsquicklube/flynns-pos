@@ -502,8 +502,45 @@ export async function updateTicketStatus(id: string, status: TicketStatus): Prom
 
 export async function updateTicketBay(id: string, bay: string | null): Promise<void> {
   const ticket = await getTicket(id);
+  if (!ticket) throw new Error("Ticket not found.");
   await execute("UPDATE tickets SET bay = ?, updated_at = ?, sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL", [bay, nowIso(), id]);
   await writeAuditLog({ action: "ticket.bay_changed", entity_type: "ticket", entity_id: id, summary: `Ticket moved to ${bay ?? "no bay"}`, before: ticket, after: { ...ticket, bay } });
+}
+
+export async function sendTicketToBay(id: string, bay: "Bay 1" | "Bay 2"): Promise<void> {
+  const ticket = await getTicket(id);
+  if (!ticket) throw new Error("Ticket not found.");
+  if (ticket.status === "completed") throw new Error("Cannot send completed ticket to bay.");
+  if (ticket.status === "canceled") throw new Error("Cannot send canceled ticket to bay.");
+  if (bay !== "Bay 1" && bay !== "Bay 2") throw new Error("Select Bay 1 or Bay 2.");
+
+  const [occupied] = await query<Pick<Ticket, "id" | "invoice_number">>(
+    "SELECT id, invoice_number FROM tickets WHERE status = 'in_service' AND bay = ? AND id <> ? AND deleted_at IS NULL LIMIT 1",
+    [bay, id]
+  );
+  if (occupied) throw new Error(`${bay} is already occupied.`);
+
+  const timestamp = nowIso();
+  const employee = getCurrentEmployeeSnapshot();
+  await execute(
+    "UPDATE tickets SET status = 'in_service', bay = ?, started_at = COALESCE(started_at, ?), started_by_employee_id = COALESCE(started_by_employee_id, ?), updated_at = ?, sync_status = 'pending' WHERE id = ? AND deleted_at IS NULL",
+    [bay, timestamp, employee.id, timestamp, id]
+  );
+
+  const summary = ticket.status === "waiting_payment"
+    ? `Sent back to ${bay}`
+    : ticket.bay && ticket.bay !== bay
+      ? `Moved from ${ticket.bay} to ${bay}`
+      : `Sent to ${bay}`;
+
+  await writeAuditLog({
+    action: ticket.bay && ticket.bay !== bay ? "ticket.bay_moved" : ticket.status === "waiting_payment" ? "ticket.sent_back_to_bay" : "ticket.sent_to_bay",
+    entity_type: "ticket",
+    entity_id: id,
+    summary,
+    before: ticket,
+    after: { ...ticket, status: "in_service", bay }
+  });
 }
 
 export async function moveTicketBay(id: string, bay: string): Promise<void> {

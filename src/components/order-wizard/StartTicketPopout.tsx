@@ -1,18 +1,20 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
-import { X } from "lucide-react";
-import { Button } from "../ui/Button";
+import { WorkflowStepHeader } from "./WorkflowStepHeader";
 
 interface StartTicketPopoutProps {
   title: string;
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
+  onBack?: () => void;
+  backLabel?: string;
   onClose: () => void;
+  showClose?: boolean;
   closeOnBackdrop?: boolean;
 }
 
-export function StartTicketPopout({ title, subtitle, children, footer, onClose, closeOnBackdrop = true }: StartTicketPopoutProps) {
+export function StartTicketPopout({ title, subtitle, children, footer, onBack, backLabel, onClose, showClose = true, closeOnBackdrop = true }: StartTicketPopoutProps) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -32,13 +34,7 @@ export function StartTicketPopout({ title, subtitle, children, footer, onClose, 
       }}
     >
       <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[24px] border border-[var(--pos-border)] bg-[var(--pos-panel)] shadow-2xl">
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--pos-border)] bg-white px-6 py-5">
-          <div>
-            <h2 className="text-2xl font-black text-[var(--pos-text)]">{title}</h2>
-            {subtitle ? <p className="mt-1 text-sm text-[var(--pos-muted)]">{subtitle}</p> : null}
-          </div>
-          <Button variant="ghost" size="sm" icon={<X size={18} />} aria-label="Close" onClick={onClose} />
-        </header>
+        <WorkflowStepHeader title={title} subtitle={subtitle} onBack={onBack} backLabel={backLabel} onClose={onClose} showClose={showClose} />
         <div className="min-h-0 flex-1 overflow-auto bg-[var(--pos-bg)] p-5">
           {children}
         </div>

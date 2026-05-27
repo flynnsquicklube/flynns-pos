@@ -15,6 +15,8 @@ interface SpecsStepProps {
   decodedBy?: string | null;
   matchedVehicle?: Vehicle | null;
   matchedCustomer?: Customer | null;
+  nextLabel?: string;
+  showPreviousButton?: boolean;
   onChange: (specs: VehicleSpecsForm) => void;
   onPrevious: () => void;
   onNext: () => void;
@@ -62,7 +64,7 @@ function normalizeKey(value: string | number | null | undefined) {
   return String(value ?? "").trim().toUpperCase();
 }
 
-export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matchedCustomer, onChange, onPrevious, onNext, onLookupVehicleInfo }: SpecsStepProps) {
+export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matchedCustomer, nextLabel = "Next", showPreviousButton = true, onChange, onPrevious, onNext, onLookupVehicleInfo }: SpecsStepProps) {
   const [years, setYears] = useState<VehicleCatalogYear[]>([]);
   const [makes, setMakes] = useState<VehicleCatalogMake[]>([]);
   const [models, setModels] = useState<VehicleCatalogModel[]>([]);
@@ -385,8 +387,8 @@ export function SpecsStep({ specs, validation, decodedBy, matchedVehicle, matche
           ))}
         </div>
         <div className="mt-8 flex justify-between">
-          <Button variant="secondary" onClick={onPrevious}>Previous</Button>
-          <Button disabled={!canAttemptContinue} onClick={onNext}>Next</Button>
+          {showPreviousButton ? <Button variant="secondary" onClick={onPrevious}>Previous</Button> : <span />}
+          <Button disabled={!canAttemptContinue} onClick={onNext}>{nextLabel}</Button>
         </div>
       </Card>
     </div>

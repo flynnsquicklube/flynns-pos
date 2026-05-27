@@ -51,11 +51,11 @@ function renderPage(route: Route, navigate: (page: PageKey, entityId?: string, s
     case "start-order":
       return <StartOrderPage onNavigate={navigate} />;
     case "order-wizard":
-      return <OrderWizardPage onCreated={(id) => navigate("ticket-detail", id)} onBackToStart={() => navigate("start-order")} />;
+      return <OrderWizardPage initialDraftId={route.entityId} onCreated={(id) => navigate("ticket-detail", id)} onBackToStart={() => navigate("start-order")} />;
     case "order-history":
       return <OrderHistoryPage onOpenTicket={(id) => navigate("ticket-detail", id, { from: "/orders", fromLabel: "Orders" })} />;
     case "work-orders":
-      return <WorkOrdersPage onOpenTicket={(id) => navigate("ticket-detail", id, { from: "/work-orders", fromLabel: "Work Orders" })} />;
+      return <WorkOrdersPage onOpenTicket={(id) => navigate("ticket-detail", id, { from: "/work-orders", fromLabel: "Work Orders" })} onContinueDraft={(id) => navigate("order-wizard", id)} />;
     case "active-bays":
       return <ActiveBaysPage onOpenTicket={(id) => navigate("ticket-detail", id, { from: "/active-bays", fromLabel: "Active Bays" })} onOpenCheckInWall={() => navigate("check-in-wall")} onOpenWaitingPayment={() => navigate("waiting-payment")} />;
     case "check-in-wall":

@@ -21,9 +21,10 @@ interface VinLookupStepProps {
   onDecode: () => void;
   onUseDecoded?: () => void;
   onContinue: () => void;
+  showInlineBack?: boolean;
 }
 
-export function VinLookupStep({ vin, validation, decodeEnabled = false, decodeResult, decodedVehicle, decoding = false, onChange, onBack, onSearch, onScannedVin, onDecode, onUseDecoded, onContinue }: VinLookupStepProps) {
+export function VinLookupStep({ vin, validation, decodeEnabled = false, decodeResult, decodedVehicle, decoding = false, onChange, onBack, onSearch, onScannedVin, onDecode, onUseDecoded, onContinue, showInlineBack = true }: VinLookupStepProps) {
   const [scannerOpen, setScannerOpen] = useState(false);
   const vinLengthWarning = vin.trim().length > 0 && vin.trim().length !== 17 ? "VINs are usually 17 characters. Manual continuation is allowed." : null;
   const handleScannedVin = (scannedVin: string) => {
@@ -81,7 +82,7 @@ export function VinLookupStep({ vin, validation, decodeEnabled = false, decodeRe
           </div>
         ) : null}
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Button variant="secondary" onClick={onBack}>Back</Button>
+          {showInlineBack ? <Button variant="secondary" onClick={onBack}>Back</Button> : null}
           <Button variant="secondary" icon={<Camera size={16} />} onClick={() => setScannerOpen(true)}>Scan VIN</Button>
           <Button variant="secondary" icon={<Search size={16} />} onClick={onSearch}>Search Local</Button>
           {decodeEnabled ? <Button disabled={decoding || vin.trim().length !== 17} onClick={onDecode}>{decoding ? "Decoding..." : "Decode VIN"}</Button> : null}

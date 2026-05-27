@@ -21,9 +21,10 @@ interface PlateLookupStepProps {
   onSearch: () => void;
   onUseExistingVehicle?: (mileage: string) => void;
   onContinue: () => void;
+  showInlineBack?: boolean;
 }
 
-export function PlateLookupStep({ plate, plateState, validation, searching = false, searched = false, matchedVehicle, matchedCustomer, onPlateChange, onStateChange, onBack, onSearch, onUseExistingVehicle, onContinue }: PlateLookupStepProps) {
+export function PlateLookupStep({ plate, plateState, validation, searching = false, searched = false, matchedVehicle, matchedCustomer, onPlateChange, onStateChange, onBack, onSearch, onUseExistingVehicle, onContinue, showInlineBack = true }: PlateLookupStepProps) {
   const [currentMileage, setCurrentMileage] = useState("");
   const [lowerMileageConfirmed, setLowerMileageConfirmed] = useState(false);
   const normalizedPlate = normalizePlate(plate);
@@ -134,7 +135,7 @@ export function PlateLookupStep({ plate, plateState, validation, searching = fal
           </div>
         ) : null}
         <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Button variant="secondary" onClick={onBack}>Back</Button>
+          {showInlineBack ? <Button variant="secondary" onClick={onBack}>Back</Button> : null}
           <Button icon={<Search size={16} />} disabled={searching || !hasPlate} onClick={onSearch}>{searching ? "Searching..." : "Search Plate"}</Button>
           {!searched ? <Button variant="secondary" disabled={!hasPlate} onClick={onContinue}>Continue with New Vehicle</Button> : null}
         </div>

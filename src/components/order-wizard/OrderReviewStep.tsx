@@ -30,8 +30,13 @@ export function OrderReviewStep(props: OrderReviewStepProps) {
   return (
     <div className="flex justify-center">
       <Card className="w-full max-w-5xl p-8">
-        <h1 className="text-2xl font-bold text-slate-950">Review Order</h1>
-        <p className="mt-1 text-sm text-slate-500">Confirm vehicle, customer, servicing, and totals before check-in.</p>
+        <div className="flex flex-wrap items-start gap-3">
+          <Button variant="secondary" size="sm" onClick={props.onPrevious}>Back</Button>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-950">Review Order</h1>
+            <p className="mt-1 text-sm text-slate-500">Confirm vehicle, customer, servicing, and totals before check-in.</p>
+          </div>
+        </div>
         {props.validation ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{props.validation}</div> : null}
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">

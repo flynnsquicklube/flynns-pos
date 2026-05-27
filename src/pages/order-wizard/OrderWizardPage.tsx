@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CustomerFleetStep } from "../../components/order-wizard/CustomerFleetStep";
 import { CustomerSearchStep } from "../../components/order-wizard/CustomerSearchStep";
+import { AddVehicleMethodStep } from "../../components/order-wizard/AddVehicleMethodStep";
 import { BaySelectionModal } from "../../components/order-wizard/BaySelectionModal";
 import { OilFilterSearchModal } from "../../components/order-wizard/OilFilterSearchModal";
 import { OrderReviewStep } from "../../components/order-wizard/OrderReviewStep";
@@ -17,6 +18,7 @@ import type { VehicleSpecsForm, WizardStep } from "../../components/order-wizard
 import { canNavigateToStep, getBlockedStepReason, hasVehicleStarted } from "../../components/order-wizard/wizardNavigation";
 import { listActiveCatalogItems } from "../../lib/db/repositories/catalogRepo";
 import { createCustomer, getCustomer, searchCustomersAdvanced } from "../../lib/db/repositories/customersRepo";
+import { cancelDraft, createOrderDraft, getOrderDraftById, markDraftConverted, touchDraftOpened, updateOrderDraft } from "../../lib/db/repositories/orderDraftsRepo";
 import { listActivePackages } from "../../lib/db/repositories/packagesRepo";
 import { getSetting } from "../../lib/db/repositories/settingsRepo";
 import { createTicketWithItems, listActiveTickets, startService } from "../../lib/db/repositories/ticketsRepo";
@@ -52,6 +54,7 @@ import type { VehicleInfoDefaultsInput } from "../../lib/db/repositories/vehicle
 interface OrderWizardPageProps {
   onCreated: (ticketId: string) => void;
   onBackToStart?: () => void;
+  initialDraftId?: string;
 }
 
 const stepOrder: WizardStep[] = ["vehicle", "specs", "customer", "servicing", "order"];
@@ -209,7 +212,7 @@ function mergeLookupContextIntoSpecs(current: VehicleSpecsForm, input: {
   };
 }
 
-export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPageProps) {
+export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: OrderWizardPageProps) {
   const { state, setState, totals } = useOrderWizardState();
   const [packages, setPackages] = useState<ServicePackage[]>([]);
   const [catalogItems, setCatalogItems] = useState<ServiceCatalogItem[]>([]);
@@ -229,9 +232,106 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   const [vehicleInfoLookupOpen, setVehicleInfoLookupOpen] = useState(false);
   const [plateLookupSearching, setPlateLookupSearching] = useState(false);
   const [plateLookupSearched, setPlateLookupSearched] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const draftSaveInFlightRef = useRef(false);
+  const draftRestoreAttemptedRef = useRef(false);
   const { notify } = useToast();
 
-  const closeStartTicketPopout = () => {
+  const hasMeaningfulDraftData = (candidate = state) => Boolean(
+    candidate.selectedCustomer ||
+      candidate.selectedCustomerId ||
+      candidate.selectedVehicleId ||
+      candidate.lookedUpVehicle ||
+      candidate.vinInput.trim() ||
+      candidate.plateInput.trim() ||
+      candidate.specs.vin.trim() ||
+      candidate.specs.plate.trim() ||
+      candidate.specs.year.trim() ||
+      candidate.specs.make.trim() ||
+      candidate.specs.model.trim() ||
+      candidate.specs.mileage.trim() ||
+      candidate.selectedPackage ||
+      candidate.selectedLines.length > 0 ||
+      candidate.selectedCatalogItems.length > 0 ||
+      candidate.customerConcern.trim() ||
+      candidate.technicianNotes.trim() ||
+      candidate.internalNotes.trim()
+  );
+
+  const buildDraftSummary = (candidate = state) => {
+    const customerName = candidate.selectedCustomer
+      ? `${candidate.selectedCustomer.first_name} ${candidate.selectedCustomer.last_name}`.trim()
+      : [candidate.customerForm.first_name, candidate.customerForm.last_name].filter(Boolean).join(" ").trim() || null;
+    const vehicleLabel = [candidate.specs.year, candidate.specs.make, candidate.specs.model].filter(Boolean).join(" ") || null;
+    const summaryParts = [
+      customerName ? "Customer selected" : null,
+      vehicleLabel || candidate.selectedVehicleId ? "Vehicle selected" : null,
+      candidate.specs.mileage ? "Mileage entered" : null,
+      candidate.selectedPackage ? "Package selected" : null
+    ].filter(Boolean);
+    return {
+      version: 1,
+      customerName,
+      vehicleLabel,
+      currentStep: candidate.step,
+      sourcePath: candidate.selectedStartingPoint,
+      packageName: candidate.selectedPackage?.name ?? null,
+      summary: summaryParts.join(" · ") || "Order started"
+    };
+  };
+
+  const buildDraftSnapshot = (candidate = state) => JSON.stringify({
+    version: 1,
+    savedAt: new Date().toISOString(),
+    state: {
+      ...candidate,
+      validation: null,
+      activePopout: candidate.step === "servicing" || candidate.step === "order" ? null : candidate.activePopout
+    }
+  });
+
+  const saveDraftNow = async (candidate = state) => {
+    if (!hasMeaningfulDraftData(candidate) || draftSaveInFlightRef.current) return draftId;
+    draftSaveInFlightRef.current = true;
+    setDraftSaveStatus("saving");
+    try {
+      const input = {
+        source_path: candidate.selectedStartingPoint,
+        current_step: candidate.step,
+        selected_customer_id: candidate.selectedCustomerId,
+        selected_vehicle_id: candidate.selectedVehicleId,
+        pending_vehicle_json: candidate.selectedVehicleId ? null : JSON.stringify(candidate.specs),
+        selected_package_id: candidate.selectedPackage?.id ?? null,
+        draft_json: buildDraftSnapshot(candidate),
+        summary_json: JSON.stringify(buildDraftSummary(candidate))
+      };
+      const saved = draftId
+        ? await updateOrderDraft(draftId, input)
+        : await createOrderDraft(input);
+      if (saved && !draftId) setDraftId(saved.id);
+      setDraftSaveStatus("saved");
+      return saved?.id ?? draftId;
+    } catch (error) {
+      setDraftSaveStatus("error");
+      if (import.meta.env.DEV) console.warn("[order-draft-save-failed]", error);
+      return draftId;
+    } finally {
+      draftSaveInFlightRef.current = false;
+    }
+  };
+
+  const closeStartTicketPopout = async () => {
+    if (hasMeaningfulDraftData()) {
+      const saveAndClose = window.confirm("Save this order to continue later?");
+      if (saveAndClose) {
+        await saveDraftNow();
+      } else {
+        const discard = window.confirm("Discard this draft? This will remove it from Continue Orders.");
+        if (!discard) return;
+        if (draftId) await cancelDraft(draftId);
+      }
+    }
     if (!state.activePopout && onBackToStart) {
       onBackToStart();
       return;
@@ -261,6 +361,40 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   useEffect(() => {
     isVinDecodeEnabled().then(setVinDecodeEnabled).catch(() => setVinDecodeEnabled(false));
   }, []);
+
+  useEffect(() => {
+    if (!initialDraftId || draftRestoreAttemptedRef.current) return;
+    draftRestoreAttemptedRef.current = true;
+    getOrderDraftById(initialDraftId)
+      .then(async (draft) => {
+        if (!draft || draft.status !== "draft") {
+          notify({ tone: "error", title: "Draft unavailable", message: "That draft is no longer active." });
+          return;
+        }
+        const parsed = JSON.parse(draft.draft_json) as { state?: typeof state };
+        if (!parsed.state) throw new Error("Draft data is incomplete.");
+        setState({ ...parsed.state, validation: null });
+        setDraftId(draft.id);
+        await touchDraftOpened(draft.id);
+        notify({ tone: "success", title: "Draft order restored", message: draft.draft_number });
+      })
+      .catch((error: unknown) => {
+        notify({ tone: "error", title: "Could not restore draft", message: error instanceof Error ? error.message : "Draft data could not be loaded." });
+      });
+  }, [initialDraftId, notify, setState, state]);
+
+  useEffect(() => {
+    if (!hasMeaningfulDraftData()) {
+      setDraftSaveStatus("idle");
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void saveDraftNow();
+    }, 800);
+    return () => window.clearTimeout(timer);
+    // Autosave intentionally follows the full wizard state; helper identities would restart the debounce on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, draftId]);
 
   useEffect(() => {
     const rawQuote = localStorage.getItem("flynns_quote_conversion");
@@ -455,6 +589,80 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   }, [filterSearchOpen, filterSearchQuery, notify]);
 
   const goToStep = (step: WizardStep) => setState((current) => ({ ...current, step, validation: null }));
+  const isAddingVehicleForSelectedCustomer = Boolean(state.customerFirstFlow && state.selectedCustomer && (state.activePopout === "addVehicle" || state.activePopout === "vinLookup" || state.activePopout === "plateLookup" || state.activePopout === "manualVehicle"));
+  const returnToAddVehicleMethod = () => {
+    setPlateLookupSearched(false);
+    setState((current) => ({
+      ...current,
+      activePopout: "addVehicle",
+      step: "customer",
+      vehicleSubstep: "method",
+      vehicleMethod: null,
+      validation: null
+    }));
+  };
+  const startAddVehicleVin = () => {
+    setVinDecodeMessage(null);
+    setLastVinDecode(null);
+    setState((current) => ({
+      ...current,
+      activePopout: "vinLookup",
+      step: "vehicle",
+      vehicleMethod: "vin",
+      vehicleSubstep: "vin",
+      vinInput: "",
+      lookedUpVehicle: null,
+      selectedVehicleId: null,
+      specs: { ...current.specs, vin: "", mileage: "" },
+      validation: null
+    }));
+  };
+  const startAddVehiclePlate = () => {
+    setPlateLookupSearched(false);
+    setState((current) => ({
+      ...current,
+      activePopout: "plateLookup",
+      step: "vehicle",
+      vehicleMethod: "plate",
+      vehicleSubstep: "plate",
+      plateInput: "",
+      plateState: current.plateState || "OH",
+      lookedUpVehicle: null,
+      selectedVehicleId: null,
+      specs: { ...current.specs, plate: "", plate_state: current.plateState || "OH", mileage: "" },
+      validation: null
+    }));
+  };
+  const startAddVehicleManual = () => {
+    setLastVinDecode(null);
+    setState((current) => ({
+      ...current,
+      activePopout: "manualVehicle",
+      step: "specs",
+      vehicleMethod: null,
+      vehicleSubstep: "method",
+      lookedUpVehicle: null,
+      selectedVehicleId: null,
+      specs: {
+        ...current.specs,
+        year: "",
+        make: "",
+        model: "",
+        trim: "",
+        engine: "",
+        drive_type: "",
+        fuel_type: "",
+        transmission_style: "",
+        vin: "",
+        plate: "",
+        plate_state: current.plateState || "OH",
+        mileage: "",
+        oil_type: "",
+        notes: ""
+      },
+      validation: null
+    }));
+  };
   const handleStepClick = (step: WizardStep) => {
     if (!canNavigateToStep(step, state)) {
       const reason = getBlockedStepReason(step, state) ?? "Finish the required steps before continuing.";
@@ -540,8 +748,8 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       ...current,
       lookedUpVehicle: match,
       selectedVehicleId: match.id,
-      selectedCustomer: customer,
-      selectedCustomerId: customer?.id ?? null,
+      selectedCustomer: customer ?? (current.customerFirstFlow ? current.selectedCustomer : null),
+      selectedCustomerId: customer?.id ?? (current.customerFirstFlow ? current.selectedCustomerId : null),
       customerForm: customer ? emptyCustomerForm : current.customerForm,
       specs: { ...specsFromVehicle(match), mileage: "" },
       validation: null,
@@ -596,8 +804,8 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
         vinInput: scannedVin,
         lookedUpVehicle: match,
         selectedVehicleId: match.id,
-        selectedCustomer: customer,
-        selectedCustomerId: customer?.id ?? null,
+        selectedCustomer: customer ?? (current.customerFirstFlow ? current.selectedCustomer : null),
+        selectedCustomerId: customer?.id ?? (current.customerFirstFlow ? current.selectedCustomerId : null),
           customerForm: customer ? emptyCustomerForm : current.customerForm,
           specs: { ...specsFromVehicle(match), mileage: "" },
           validation: null,
@@ -695,6 +903,93 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       if (!confirmed) return false;
     }
     return true;
+  };
+
+  const checkDuplicateVehicleBeforeServicing = async () => {
+    if (state.lookedUpVehicle || state.selectedVehicleId) return false;
+    const normalizedIdentifier = normalizeIdentifierDraft(state.specs);
+    const duplicate = await findVehicleByVinOrPlate({
+      vin: normalizedIdentifier.vin || null,
+      plate: normalizedIdentifier.plate || null,
+      state: normalizedIdentifier.plate ? normalizedIdentifier.plate_state : null
+    });
+    if (!duplicate) return false;
+    const duplicateCustomer = duplicate.customer_id ? await getCustomer(duplicate.customer_id) : null;
+    setState((current) => ({
+      ...current,
+      lookedUpVehicle: duplicate,
+      selectedVehicleId: duplicate.id,
+      selectedCustomer: duplicateCustomer ?? current.selectedCustomer,
+      selectedCustomerId: duplicateCustomer?.id ?? current.selectedCustomerId,
+      specs: { ...specsFromVehicle(duplicate), mileage: current.specs.mileage || "" },
+      step: "specs",
+      activePopout: "manualVehicle",
+      validation: "This vehicle already exists. Review it and continue using the existing vehicle instead of creating a duplicate."
+    }));
+    notify({ tone: "error", title: "Existing vehicle found", message: "Use the existing vehicle match instead of creating a duplicate." });
+    return true;
+  };
+
+  const saveVehicleForSelectedCustomerBeforeServicing = async () => {
+    if (!state.selectedCustomer || state.lookedUpVehicle || state.selectedVehicleId) return null;
+    const normalizedIdentifier = normalizeIdentifierDraft(state.specs);
+    const vehicleInput = {
+      customer_id: state.selectedCustomer.id,
+      vin: normalizedIdentifier.vin || null,
+      plate: normalizedIdentifier.plate || null,
+      plate_state: normalizedIdentifier.plate ? normalizedIdentifier.plate_state || null : null,
+      year: Number(state.specs.year),
+      make: state.specs.make.trim(),
+      model: state.specs.model.trim(),
+      trim: state.specs.trim.trim() || null,
+      sub_model: state.specs.trim.trim() || null,
+      engine_model: state.specs.engine.trim() || null,
+      drive_type: state.specs.drive_type.trim() || null,
+      fuel_type: state.specs.fuel_type.trim() || null,
+      transmission_style: state.specs.transmission_style.trim() || null,
+      mileage: Number(state.specs.mileage),
+      oil_type: state.oilTypeOverride.trim() || state.specs.oil_type.trim() || null,
+      notes: [state.specs.engine ? `Engine: ${state.specs.engine}` : "", state.specs.notes].filter(Boolean).join(" | ") || null
+    };
+    const vehicle = await createVehicle(vehicleInput);
+    if (lastVinDecode && vehicleInput.vin && lastVinDecode.vin === vehicleInput.vin.trim().toUpperCase()) {
+      await applyVehicleDecode(vehicle.id, lastVinDecode, false);
+    }
+    setState((current) => ({
+      ...current,
+      lookedUpVehicle: vehicle,
+      selectedVehicleId: vehicle.id,
+      specs: specsFromVehicle(vehicle),
+      validation: null
+    }));
+    notify({ tone: "success", title: "Vehicle saved", message: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") });
+    return vehicle;
+  };
+
+  const handleSpecsNext = async () => {
+    if (!validateSpecs()) return;
+    const duplicateFound = await checkDuplicateVehicleBeforeServicing();
+    if (duplicateFound) return;
+    if (state.selectedCustomer || state.selectedCustomerId) {
+      if (isAddingVehicleForSelectedCustomer) {
+        try {
+          await saveVehicleForSelectedCustomerBeforeServicing();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unable to save vehicle.";
+          setState((current) => ({ ...current, validation: message }));
+          notify({ tone: "error", title: "Vehicle not saved", message });
+          return;
+        }
+      }
+      setState((current) => ({ ...current, activePopout: null, step: "servicing", validation: null }));
+      return;
+    }
+    setState((current) => ({
+      ...current,
+      activePopout: "customerSearch",
+      step: "customer",
+      validation: "New vehicle. Select or add the customer before continuing."
+    }));
   };
 
   const validateCustomer = () => {
@@ -960,6 +1255,7 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       taxRate: state.taxRate,
       packageDetails: buildPackageDetails()
     });
+    if (draftId) await markDraftConverted(draftId, ticket.id);
     return { ticketId: ticket.id, customer, vehicle };
   };
 
@@ -1115,6 +1411,13 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   return (
     <>
     <OrderWizardShell currentStep={state.step} state={state} onStepClick={handleStepClick}>
+      {draftId || draftSaveStatus !== "idle" ? (
+        <div className="mb-3 flex justify-end">
+          <span className="rounded-full border border-[var(--pos-border)] bg-[var(--pos-card)] px-3 py-1 text-xs font-bold text-[var(--pos-muted)]">
+            Draft {draftSaveStatus === "saving" ? "saving..." : draftSaveStatus === "error" ? "save failed" : "saved"}
+          </span>
+        </div>
+      ) : null}
       {state.step === "servicing" && workflowPackage ? (
         <PackageWorkflowScreen
           servicePackage={workflowPackage}
@@ -1236,7 +1539,7 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
         />
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "vin" ? (
-        <StartTicketPopout title="VIN Lookup" subtitle="Scan, type, or decode a VIN while manual entry remains available." onClose={closeStartTicketPopout}>
+        <StartTicketPopout title="VIN Lookup" subtitle="Scan, type, or decode a VIN while manual entry remains available." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout} onClose={closeStartTicketPopout}>
           <VinLookupStep
             vin={state.vinInput}
             validation={state.validation}
@@ -1245,7 +1548,8 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             decodedVehicle={lastVinDecode}
             decoding={decodingVin}
             onChange={(vinInput) => setState((current) => ({ ...current, vinInput, specs: { ...current.specs, vin: vinInput } }))}
-            onBack={closeStartTicketPopout}
+            onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout}
+            showInlineBack={false}
             onSearch={() => void applyVehicleLookup(state.vinInput, "No local VIN match found. Continue with manual specs.")}
             onScannedVin={(vinInput) => void handleScannedVin(vinInput)}
             onDecode={() => void decodeVinIntoSpecs()}
@@ -1261,7 +1565,7 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
         </StartTicketPopout>
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "plate" ? (
-        <StartTicketPopout title="License Plate Lookup" subtitle="Search local vehicles by plate and state." onClose={closeStartTicketPopout}>
+        <StartTicketPopout title="License Plate Lookup" subtitle="Search local vehicles by plate and state." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout} onClose={closeStartTicketPopout}>
           <PlateLookupStep
             plate={state.plateInput}
             plateState={state.plateState}
@@ -1278,7 +1582,8 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
               setPlateLookupSearched(false);
               setState((current) => ({ ...current, plateState: normalizePlateState(plateState), lookedUpVehicle: null, selectedVehicleId: null, specs: { ...current.specs, plate_state: normalizePlateState(plateState) } }));
             }}
-            onBack={closeStartTicketPopout}
+            onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout}
+            showInlineBack={false}
             onSearch={() => void applyVehicleLookup(state.plateInput, `No local vehicle found for ${normalizePlate(state.plateInput)} ${normalizePlateState(state.plateState)}.`)}
             onUseExistingVehicle={useExistingPlateVehicle}
             onContinue={continueWithNewPlateVehicle}
@@ -1286,34 +1591,34 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
         </StartTicketPopout>
       ) : null}
       {state.step === "specs" ? (
-        <StartTicketPopout title={state.lookedUpVehicle ? "Confirm Vehicle Specs" : "Manual Vehicle Entry"} subtitle="Confirm the vehicle, identifier, and current mileage before service selection." onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+        <StartTicketPopout title={state.lookedUpVehicle ? "Confirm Vehicle Specs" : isAddingVehicleForSelectedCustomer ? "Save Vehicle" : "Manual Vehicle Entry"} subtitle="Confirm the vehicle, identifier, and current mileage before service selection." onBack={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
           <SpecsStep
             specs={state.specs}
             validation={state.validation}
             decodedBy={lastVinDecode?.vin === state.specs.vin ? "NHTSA" : null}
             matchedVehicle={state.lookedUpVehicle}
             matchedCustomer={state.selectedCustomer}
+            nextLabel={isAddingVehicleForSelectedCustomer ? "Save Vehicle" : "Next"}
+            showPreviousButton={false}
             onChange={(specs) => setState((current) => ({ ...current, specs }))}
-            onPrevious={closeStartTicketPopout}
-            onNext={() => {
-              if (!validateSpecs()) return;
-              if (state.selectedCustomer || state.selectedCustomerId) {
-                setState((current) => ({ ...current, activePopout: null, step: "servicing", validation: null }));
-                return;
-              }
-              setState((current) => ({
-                ...current,
-                activePopout: "customerSearch",
-                step: "customer",
-                validation: "New vehicle. Select or add the customer before continuing."
-              }));
-            }}
+            onPrevious={isAddingVehicleForSelectedCustomer ? returnToAddVehicleMethod : closeStartTicketPopout}
+            onNext={() => void handleSpecsNext()}
             onLookupVehicleInfo={() => setVehicleInfoLookupOpen(true)}
           />
         </StartTicketPopout>
       ) : null}
-      {state.step === "customer" && state.customerFirstFlow ? (
-        <StartTicketPopout title={state.selectedCustomer ? "Select Vehicle" : "Find Customer"} subtitle={state.selectedCustomer ? `Choose a vehicle for ${state.selectedCustomer.first_name} ${state.selectedCustomer.last_name}.` : "Search by name, phone, email, VIN, or plate."} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+      {state.step === "customer" && state.customerFirstFlow && state.activePopout === "addVehicle" && state.selectedCustomer ? (
+        <StartTicketPopout title="Add Vehicle" subtitle={`Choose how to add a vehicle for ${state.selectedCustomer.first_name} ${state.selectedCustomer.last_name}.`} onBack={() => setState((current) => ({ ...current, activePopout: "customerVehicles", validation: null }))} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+          <AddVehicleMethodStep
+            customer={state.selectedCustomer}
+            onSelectVin={startAddVehicleVin}
+            onSelectPlate={startAddVehiclePlate}
+            onSelectManual={startAddVehicleManual}
+          />
+        </StartTicketPopout>
+      ) : null}
+      {state.step === "customer" && state.customerFirstFlow && state.activePopout !== "addVehicle" ? (
+        <StartTicketPopout title={state.selectedCustomer ? "Select Vehicle" : "Find Customer"} subtitle={state.selectedCustomer ? `Choose a vehicle for ${state.selectedCustomer.first_name} ${state.selectedCustomer.last_name}.` : "Search by name, phone, email, VIN, or plate."} onBack={closeStartTicketPopout} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
           <CustomerSearchStep
             selectedCustomer={state.selectedCustomer}
             selectedVehicleId={state.selectedVehicleId}
@@ -1353,16 +1658,15 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
                 activePopout: "addVehicle",
                 lookedUpVehicle: null,
                 selectedVehicleId: null,
-                specs: { ...current.specs, vin: "", plate: "", mileage: "" },
-                step: "specs",
-                validation: "Customer selected. Add vehicle specs for this customer."
+                step: "customer",
+                validation: null
               }));
             }}
           />
         </StartTicketPopout>
       ) : null}
       {state.step === "customer" && !state.customerFirstFlow ? (
-        <StartTicketPopout title="Select Customer" subtitle="Attach this vehicle to a customer before service selection." onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+        <StartTicketPopout title="Select Customer" subtitle="Attach this vehicle to a customer before service selection." onBack={() => setState((current) => ({ ...current, activePopout: "manualVehicle", step: "specs", validation: null }))} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
           <CustomerFleetStep
             search={state.customerSearch}
             matches={state.customerMatches}
