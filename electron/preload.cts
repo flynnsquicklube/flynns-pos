@@ -13,10 +13,25 @@ const files = {
   readText: (filePath: string) => ipcRenderer.invoke("file:readText", filePath) as Promise<string>
 };
 
+const appTools = {
+  getPaths: () => ipcRenderer.invoke("app:getPaths") as Promise<{ appDataPath: string; userDataPath: string; databasePath: string | null }>,
+  openPath: (targetPath: string) => ipcRenderer.invoke("shell:openPath", targetPath) as Promise<{ ok: boolean; error?: string }>,
+  getPlatformInfo: () => ipcRenderer.invoke("app:getPlatformInfo") as Promise<{ appVersion: string; electronVersion: string; nodeVersion: string; platform: string; arch: string }>
+};
+
+const backup = {
+  createDatabaseBackup: (input: { defaultFileName: string }) =>
+    ipcRenderer.invoke("backup:createDatabaseBackup", input) as Promise<{ ok: boolean; filePath?: string; fileName?: string; fileSizeBytes?: number; databaseSizeBytes?: number; error?: string }>,
+  saveDiagnosticsJson: (input: { defaultFileName: string; payload: unknown }) =>
+    ipcRenderer.invoke("backup:saveDiagnosticsJson", input) as Promise<{ ok: boolean; filePath?: string; fileName?: string; fileSizeBytes?: number; error?: string }>
+};
+
 const bridge = {
   isElectron: true,
   database,
-  files
+  files,
+  app: appTools,
+  backup
 };
 
 if (process.env.NODE_ENV !== "production") {

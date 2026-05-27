@@ -19,7 +19,6 @@ interface OrderReviewStepProps {
   validation: string | null;
   saving: boolean;
   onPrevious: () => void;
-  onSaveDraft: () => void;
   onCreateOrder: () => void;
 }
 
@@ -91,7 +90,6 @@ export function OrderReviewStep(props: OrderReviewStepProps) {
         <div className="mt-8 flex flex-wrap justify-between gap-3">
           <Button variant="secondary" onClick={props.onPrevious}>Previous</Button>
           <div className="flex gap-3">
-            <Button variant="secondary" onClick={props.onSaveDraft}>Save Draft</Button>
             <Button icon={<Save size={16} />} disabled={props.saving} onClick={props.onCreateOrder}>
               {props.saving ? "Creating..." : "Check In / Create Order"}
             </Button>

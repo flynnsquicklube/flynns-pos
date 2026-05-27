@@ -10,11 +10,10 @@ interface OilFilterSearchModalProps {
   loading: boolean;
   onQueryChange: (query: string) => void;
   onSelect: (item: InventoryItem) => void;
-  onAddAsLine: (item: InventoryItem) => void;
   onClose: () => void;
 }
 
-export function OilFilterSearchModal({ query, results, loading, onQueryChange, onSelect, onAddAsLine, onClose }: OilFilterSearchModalProps) {
+export function OilFilterSearchModal({ query, results, loading, onQueryChange, onSelect, onClose }: OilFilterSearchModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-3xl rounded-3xl border border-[var(--pos-border-strong)] bg-[var(--pos-panel)] shadow-2xl">
@@ -47,9 +46,8 @@ export function OilFilterSearchModal({ query, results, loading, onQueryChange, o
                   <div className="text-sm text-[var(--pos-muted)]">Cost {formatMoney(item.cost)} · Qty {item.quantity_on_hand}</div>
                 </div>
               </div>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                <Button onClick={() => onSelect(item)}>Use This Filter</Button>
-                <Button variant="secondary" onClick={() => onAddAsLine(item)}>Add as Charged Item</Button>
+              <div className="mt-4">
+                <Button className="w-full" onClick={() => onSelect(item)}>Use This Filter at Retail</Button>
               </div>
             </div>
           ))}

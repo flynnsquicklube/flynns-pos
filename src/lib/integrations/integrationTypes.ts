@@ -1,17 +1,32 @@
-export type IntegrationStatus = "disabled" | "not_configured" | "ready" | "error";
+export type IntegrationType =
+  | "vin_decoder"
+  | "recall_lookup"
+  | "fuel_economy"
+  | "vehicle_info"
+  | "plate_lookup"
+  | "geocoding"
+  | "payment_terminal"
+  | "part_fitment"
+  | "messaging"
+  | "accounting";
 
-export interface IntegrationResult<T = unknown> {
-  ok: boolean;
+export type IntegrationStatus = "disabled" | "not_configured" | "configured" | "error";
+
+export interface IntegrationDescriptor {
+  id: string;
+  type: IntegrationType;
+  name: string;
+  provider: string;
   status: IntegrationStatus;
-  message: string;
-  data?: T;
+  isFreePublicApi: boolean;
+  requiresApiKey: boolean;
+  requiresInternet: boolean;
+  description: string;
+  settingsKeys: string[];
+  lastError?: string | null;
+  testConnection?: () => Promise<{ ok: boolean; message: string }>;
 }
 
-export function notConfigured<T = unknown>(message: string): IntegrationResult<T> {
+export function notConfigured<T>(message: string): { ok: false; status: "not_configured"; message: string; data?: T } {
   return { ok: false, status: "not_configured", message };
 }
-
-export function disabled<T = unknown>(message: string): IntegrationResult<T> {
-  return { ok: false, status: "disabled", message };
-}
-

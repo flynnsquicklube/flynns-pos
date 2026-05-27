@@ -1,11 +1,12 @@
-import { SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
+import { PageHeader } from "../components/ui/PageHeader";
 import { listOrderHistory } from "../lib/db/repositories/ticketsRepo";
+import { getDisplayInvoiceNumber } from "../lib/domain/invoices/invoiceNumber";
 import { rangeForKey, type DateRangeKey } from "../lib/db/repositories/reportsRepo";
 import { formatMoney } from "../lib/utils/money";
 import type { TicketWithDetails } from "../types/ticket";
@@ -27,26 +28,22 @@ export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
   }, []);
 
   const filtered = tickets.filter((ticket) => {
-    const haystack = `${ticket.customer_first_name ?? ""} ${ticket.customer_last_name ?? ""} ${ticket.vehicle_make ?? ""} ${ticket.vehicle_model ?? ""} ${ticket.vehicle_plate ?? ""} ${ticket.vehicle_vin ?? ""} ${ticket.id} ${ticket.service_names ?? ""}`.toLowerCase();
+    const haystack = `${ticket.customer_first_name ?? ""} ${ticket.customer_last_name ?? ""} ${ticket.vehicle_make ?? ""} ${ticket.vehicle_model ?? ""} ${ticket.vehicle_plate ?? ""} ${ticket.vehicle_vin ?? ""} ${ticket.id} ${getDisplayInvoiceNumber(ticket)} ${ticket.service_names ?? ""}`.toLowerCase();
     const range = rangeForKey(rangeKey);
     const ticketDate = new Date(ticket.completed_at ?? ticket.created_at).getTime();
     const inRange = (!range.dateFrom || ticketDate >= new Date(range.dateFrom).getTime()) && (!range.dateTo || ticketDate <= new Date(range.dateTo).getTime());
-    return inRange && haystack.includes(search.toLowerCase()) && (status === "all" || ticket.status === status) && (paymentStatus === "all" || ticket.payment_status === paymentStatus);
+    const normalizedPayStatus = ticket.payment_status === "partial" ? "partially_paid" : ticket.payment_status;
+    return inRange && haystack.includes(search.toLowerCase()) && (status === "all" || ticket.status === status) && (paymentStatus === "all" || normalizedPayStatus === paymentStatus);
   });
 
   return (
     <section className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-950">Orders</h1>
-        <p className="text-sm text-slate-500">Review completed, open, and canceled orders.</p>
-      </div>
+      <PageHeader title="Orders" subtitle="Search completed, active, canceled, and imported orders." />
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="secondary" disabled>All Operations</Button>
         {(["today", "last7", "month", "all"] as DateRangeKey[]).map((key) => (
           <Button key={key} variant={rangeKey === key ? "primary" : "secondary"} onClick={() => setRangeKey(key)}>{rangeForKey(key).label}</Button>
         ))}
-        <Button variant="secondary" disabled>Custom Range Coming Soon</Button>
-        <select className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}>
+        <select className="min-h-12 rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-sm font-semibold text-[var(--pos-text)]" value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="all">All statuses</option>
           <option value="checked_in">Checked In</option>
           <option value="in_service">In Service</option>
@@ -54,14 +51,13 @@ export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
           <option value="completed">Completed</option>
           <option value="canceled">Canceled</option>
         </select>
-        <select className="h-11 rounded-md border border-slate-200 bg-white px-3 text-sm" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
+        <select className="min-h-12 rounded-[var(--pos-radius-md)] border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-sm font-semibold text-[var(--pos-text)]" value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}>
           <option value="all">All pay statuses</option>
           <option value="paid">Paid</option>
-          <option value="partial">Partial</option>
+          <option value="partially_paid">Partially Paid</option>
           <option value="unpaid">Unpaid</option>
         </select>
-        <Input className="max-w-sm" placeholder="Customer, vehicle, order ID, VIN, plate" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <Button variant="secondary" disabled icon={<SlidersHorizontal size={16} />}>More Filters Coming Soon</Button>
+        <Input className="max-w-sm" placeholder="Customer, vehicle, invoice #, VIN, plate" value={search} onChange={(event) => setSearch(event.target.value)} />
       </div>
       {error ? <Card className="p-4 text-sm text-red-700">{error}</Card> : null}
       <Card className="overflow-hidden">
@@ -70,29 +66,25 @@ export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
         ) : (
           <>
           <div className="hidden overflow-auto lg:block">
-            <table className="w-full min-w-[1180px] border-collapse text-sm">
-              <thead className="sticky top-0 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <table className="w-full min-w-[900px] border-collapse text-sm">
+              <thead className="sticky top-0 bg-[var(--pos-panel-2)] text-left text-xs uppercase tracking-wide text-[var(--pos-muted)]">
                 <tr>
-                  {["Start Date", "End Date", "Customer", "Fleet Location", "Status", "Pay Status", "Order ID", "Amount", "Vehicle", "Plate", "Operation", "Internal Note"].map((heading) => (
-                    <th key={heading} className="border-b border-slate-200 px-4 py-3 font-semibold">{heading}</th>
+                  {["Invoice #", "Customer", "Vehicle", "Plate", "Status", "Pay Status", "Total", "Action"].map((heading) => (
+                    <th key={heading} className="border-b border-[var(--pos-border)] px-4 py-3 font-semibold">{heading}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((ticket) => (
-                  <tr key={ticket.id} onClick={() => onOpenTicket(ticket.id)} className={`cursor-pointer ${ticket.status === "completed" ? "bg-emerald-50/60 hover:bg-emerald-50" : "bg-white hover:bg-slate-50"}`}>
-                    <td className="border-b border-slate-100 px-4 py-3">{new Date(ticket.created_at).toLocaleDateString()}</td>
-                    <td className="border-b border-slate-100 px-4 py-3">{ticket.completed_at ? new Date(ticket.completed_at).toLocaleDateString() : "-"}</td>
-                    <td className="border-b border-slate-100 px-4 py-3 font-medium">{ticket.customer_first_name} {ticket.customer_last_name}</td>
-                    <td className="border-b border-slate-100 px-4 py-3">-</td>
-                    <td className="border-b border-slate-100 px-4 py-3"><Badge tone={ticket.status === "completed" ? "green" : "slate"}>{ticket.status}</Badge></td>
-                    <td className="border-b border-slate-100 px-4 py-3"><Badge tone={ticket.payment_status === "paid" ? "green" : "yellow"}>{ticket.payment_status === "paid" ? "Paid" : "Not Paid"}</Badge></td>
-                    <td className="border-b border-slate-100 px-4 py-3">{ticket.id}</td>
-                    <td className="border-b border-slate-100 px-4 py-3 font-semibold">{formatMoney(ticket.total)}</td>
-                    <td className="border-b border-slate-100 px-4 py-3">{[ticket.vehicle_year, ticket.vehicle_make, ticket.vehicle_model].filter(Boolean).join(" ")}</td>
-                    <td className="border-b border-slate-100 px-4 py-3">{ticket.vehicle_plate ?? "-"}</td>
-                    <td className="border-b border-slate-100 px-4 py-3">Flynn's Quick Lube</td>
-                    <td className="border-b border-slate-100 px-4 py-3">{ticket.internal_notes ?? "-"}</td>
+                  <tr key={ticket.id} className="bg-[var(--pos-card)] text-[var(--pos-text)] hover:bg-[var(--pos-card-hover)]">
+                    <td className="border-b border-[var(--pos-border)] px-4 py-3 font-black text-[var(--pos-blue)]">{getDisplayInvoiceNumber(ticket)}<div className="mt-1 text-xs font-semibold text-[var(--pos-muted)]">{new Date(ticket.created_at).toLocaleDateString()}</div></td>
+                    <td className="border-b border-[var(--pos-border)] px-4 py-3 font-medium">{ticket.customer_first_name} {ticket.customer_last_name}</td>
+                    <td className="border-b border-[var(--pos-border)] px-4 py-3">{[ticket.vehicle_year, ticket.vehicle_make, ticket.vehicle_model].filter(Boolean).join(" ")}</td>
+                    <td className="border-b border-[var(--pos-border)] px-4 py-3">{ticket.vehicle_plate ?? "-"}</td>
+                    <td className="border-b border-[var(--pos-border)] px-4 py-3"><Badge tone={ticket.status === "completed" ? "green" : "slate"}>{ticket.status}</Badge></td>
+                    <td className="border-b border-[var(--pos-border)] px-4 py-3"><Badge tone={ticket.payment_status === "paid" ? "green" : ticket.payment_status === "unpaid" ? "yellow" : "blue"}>{ticket.payment_status === "partial" ? "partially_paid" : ticket.payment_status}</Badge></td>
+                    <td className="border-b border-[var(--pos-border)] px-4 py-3 font-semibold">{formatMoney(ticket.total)}</td>
+                    <td className="border-b border-[var(--pos-border)] px-4 py-3 text-right"><Button size="sm" variant="secondary" onClick={() => onOpenTicket(ticket.id)}>Open</Button></td>
                   </tr>
                 ))}
               </tbody>
@@ -104,6 +96,7 @@ export function OrderHistoryPage({ onOpenTicket }: OrderHistoryPageProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="font-bold text-slate-950">{ticket.customer_first_name} {ticket.customer_last_name}</div>
+                    <div className="mt-1 text-xs font-bold text-[var(--pos-blue)]">Invoice {getDisplayInvoiceNumber(ticket)}</div>
                     <div className="mt-1 text-sm text-slate-500">{[ticket.vehicle_year, ticket.vehicle_make, ticket.vehicle_model].filter(Boolean).join(" ")}</div>
                   </div>
                   <Badge tone={ticket.status === "completed" ? "green" : "slate"}>{ticket.status}</Badge>

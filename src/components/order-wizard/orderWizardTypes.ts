@@ -7,12 +7,26 @@ import type { OilFilterSuggestion } from "../../lib/domain/services/oilFilterSug
 export type WizardStep = "vehicle" | "specs" | "customer" | "servicing" | "order";
 export type VehicleMethod = "vin" | "plate" | null;
 export type VehicleSubstep = "method" | "vin" | "plate";
+export type StartTicketPopoutKey =
+  | "customerSearch"
+  | "customerVehicles"
+  | "mileageEntry"
+  | "vinLookup"
+  | "plateLookup"
+  | "manualVehicle"
+  | "addCustomer"
+  | "addVehicle"
+  | null;
 
 export interface VehicleSpecsForm {
   year: string;
   make: string;
   model: string;
+  trim: string;
   engine: string;
+  drive_type: string;
+  fuel_type: string;
+  transmission_style: string;
   vin: string;
   plate: string;
   plate_state: string;
@@ -38,6 +52,7 @@ export interface CustomLineForm {
 
 export interface OrderWizardState {
   selectedStartingPoint: "vehicle" | "customer" | "manual";
+  activePopout: StartTicketPopoutKey;
   customerFirstFlow: boolean;
   step: WizardStep;
   vehicleSubstep: VehicleSubstep;
@@ -64,8 +79,11 @@ export interface OrderWizardState {
   selectedOilFilterInventoryItemId: string | null;
   selectedOilFilterSku: string | null;
   selectedOilFilterName: string | null;
+  selectedOilFilterBrand: string | null;
+  selectedOilFilterRetailPrice: number | null;
+  selectedOilFilterCost: number | null;
   selectedOilFilterSource: string | null;
-  filterChoice: "suggested" | "manual" | "customer_supplied" | "no_filter" | null;
+  filterChoice: "inventory" | "manual" | "suggested" | "customer_supplied" | "no_filter" | "standard_unmatched" | null;
   selectedOilInventoryItemId: string | null;
   selectedOilSku: string | null;
   selectedOilName: string | null;

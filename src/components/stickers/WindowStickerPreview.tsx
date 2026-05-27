@@ -19,7 +19,7 @@ export function WindowStickerPreview({ stickerData, onMarkPrinted, onSkip }: Win
         <div className="p-5">
           <div className="mx-auto max-w-sm rounded-2xl border-4 border-[var(--pos-blue)] bg-white p-5 text-slate-950 shadow-[0_0_30px_rgba(11,124,255,0.22)]">
             <div className="text-center">
-              <div className="text-xl font-black">Flynn's Quick Lube</div>
+              <div className="text-xl font-black">{stickerData.businessName}</div>
               <div className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500">Next Service Reminder</div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -39,8 +39,9 @@ export function WindowStickerPreview({ stickerData, onMarkPrinted, onSkip }: Win
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 border-t border-[var(--pos-border)] p-5">
+        <div className="grid gap-3 border-t border-[var(--pos-border)] p-5 sm:grid-cols-3">
           <Button variant="secondary" onClick={onSkip}>Skip / Print Later</Button>
+          <Button variant="secondary" onClick={() => window.print()}>Print Preview</Button>
           <Button onClick={onMarkPrinted}>Mark Printed</Button>
         </div>
       </div>

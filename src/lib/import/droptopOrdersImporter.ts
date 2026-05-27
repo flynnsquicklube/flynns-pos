@@ -201,13 +201,14 @@ export async function importDroptopOrders(text: string, fileName: string): Promi
       const ticketId = createId("tkt");
       await execute(
         `INSERT INTO tickets (
-          id, customer_id, vehicle_id, status, subtotal, discount_total, tax_total, fee_total,
+          id, invoice_number, customer_id, vehicle_id, status, subtotal, discount_total, tax_total, fee_total,
           total, payment_status, notes, customer_concern, technician_notes, internal_notes, bay,
           created_at, updated_at, completed_at, external_source, external_id, is_imported,
           original_import_json, imported_at, deleted_at, sync_status
-        ) VALUES (?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, 'droptop', ?, 1, ?, ?, NULL, 'synced')`,
+        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, 'droptop', ?, 1, ?, ?, NULL, 'synced')`,
         [
           ticketId,
+          orderId,
           customer.id,
           vehicle.id,
           status,

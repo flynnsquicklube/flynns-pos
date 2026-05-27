@@ -4,11 +4,17 @@ export interface InventoryItem {
   name: string;
   category: string;
   vendor: string | null;
+  brand?: string | null;
+  supplier?: string | null;
   cost: number;
   retail_price: number;
   quantity_on_hand: number;
   reorder_point: number;
   barcode: string | null;
+  tax_exempt?: number;
+  trackable?: number;
+  sellable?: number;
+  replenishable?: number;
   active: number;
   notes: string | null;
   product_id?: string | null;

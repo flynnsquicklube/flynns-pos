@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from "electron";
 import isDev from "electron-is-dev";
 import Database from "better-sqlite3";
 import fs from "node:fs/promises";
@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 let db: Database.Database | null = null;
+let currentDbPath: string | null = null;
 
 function nowIso() {
   return new Date().toISOString();
@@ -25,6 +26,7 @@ function getDatabase() {
 
 function initializeDatabase() {
   const dbPath = path.join(app.getPath("userData"), "flynns-pos.sqlite");
+  currentDbPath = dbPath;
   db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
@@ -163,6 +165,30 @@ function createWindow() {
 
 app.whenReady().then(() => {
   const dbPath = initializeDatabase();
+  const getSafeOrigin = (url: string) => {
+    try {
+      return url.startsWith("file://") ? "file://" : new URL(url).origin;
+    } catch {
+      return "";
+    }
+  };
+  const isAllowedAppOrigin = (origin: string) => origin === "file://" || origin === "http://127.0.0.1:5173" || origin === "http://localhost:5173";
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const origin = getSafeOrigin(details.requestingUrl || webContents.getURL());
+    if (permission === "media" && isAllowedAppOrigin(origin)) {
+      console.log(`[permissions] media requested from ${origin}: allowed`);
+      callback(true);
+      return;
+    }
+    console.log(`[permissions] ${permission} requested from ${origin}: denied`);
+    callback(false);
+  });
+
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+    if (permission === "media" && isAllowedAppOrigin(requestingOrigin)) return true;
+    return false;
+  });
 
   ipcMain.handle("db:query", (_event, sql: string, params: unknown[] = []) => {
     try {
@@ -204,6 +230,67 @@ app.whenReady().then(() => {
   ipcMain.handle("db:info", () => ({ path: dbPath, ready: true }));
   ipcMain.handle("db:getPath", () => dbPath);
   ipcMain.handle("file:readText", async (_event, filePath: string) => fs.readFile(filePath, "utf8"));
+  ipcMain.handle("app:getPaths", () => ({
+    appDataPath: app.getPath("appData"),
+    userDataPath: app.getPath("userData"),
+    databasePath: currentDbPath
+  }));
+  ipcMain.handle("app:getPlatformInfo", () => ({
+    appVersion: app.getVersion(),
+    electronVersion: process.versions.electron,
+    nodeVersion: process.versions.node,
+    platform: process.platform,
+    arch: process.arch
+  }));
+  ipcMain.handle("shell:openPath", async (_event, targetPath: string) => {
+    const error = await shell.openPath(targetPath);
+    return error ? { ok: false, error } : { ok: true };
+  });
+  ipcMain.handle("backup:createDatabaseBackup", async (_event, input: { defaultFileName?: string }) => {
+    try {
+      if (!currentDbPath || !db) return { ok: false, error: "SQLite database path is not available." };
+      db.pragma("wal_checkpoint(TRUNCATE)");
+      const backupDialogOptions = {
+        title: "Create Database Backup",
+        defaultPath: path.join(app.getPath("documents"), input.defaultFileName ?? "flynns-pos-backup.sqlite"),
+        filters: [{ name: "SQLite Database", extensions: ["sqlite"] }]
+      };
+      const { canceled, filePath } = mainWindow
+        ? await dialog.showSaveDialog(mainWindow, backupDialogOptions)
+        : await dialog.showSaveDialog(backupDialogOptions);
+      if (canceled || !filePath) return { ok: false, error: "Backup canceled." };
+      await fs.copyFile(currentDbPath, filePath);
+      const [backupStat, databaseStat] = await Promise.all([fs.stat(filePath), fs.stat(currentDbPath)]);
+      return {
+        ok: true,
+        filePath,
+        fileName: path.basename(filePath),
+        fileSizeBytes: backupStat.size,
+        databaseSizeBytes: databaseStat.size
+      };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Backup failed." };
+    }
+  });
+  ipcMain.handle("backup:saveDiagnosticsJson", async (_event, input: { defaultFileName?: string; payload: unknown }) => {
+    try {
+      const diagnosticsDialogOptions = {
+        title: "Export Diagnostics",
+        defaultPath: path.join(app.getPath("documents"), input.defaultFileName ?? "flynns-pos-diagnostics.json"),
+        filters: [{ name: "JSON", extensions: ["json"] }]
+      };
+      const { canceled, filePath } = mainWindow
+        ? await dialog.showSaveDialog(mainWindow, diagnosticsDialogOptions)
+        : await dialog.showSaveDialog(diagnosticsDialogOptions);
+      if (canceled || !filePath) return { ok: false, error: "Diagnostic export canceled." };
+      const json = JSON.stringify(input.payload, null, 2);
+      await fs.writeFile(filePath, json, "utf8");
+      const stat = await fs.stat(filePath);
+      return { ok: true, filePath, fileName: path.basename(filePath), fileSizeBytes: stat.size };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Diagnostic export failed." };
+    }
+  });
 
   createWindow();
 
@@ -217,6 +304,15 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+app.on("before-quit", () => {
+  try {
+    db?.close();
+    db = null;
+  } catch (error) {
+    console.error("Failed to close SQLite database", error);
   }
 });
 

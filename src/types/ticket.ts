@@ -1,15 +1,18 @@
 import type { TicketPackageDetails } from "./servicePackage";
 
 export type TicketStatus = "draft" | "checked_in" | "in_service" | "waiting_payment" | "completed" | "canceled";
-export type PaymentStatus = "unpaid" | "partial" | "paid" | "refunded";
+export type PaymentStatus = "unpaid" | "partial" | "partially_paid" | "paid" | "refunded" | "voided";
 
 export interface Ticket {
   id: string;
+  invoice_number: string | null;
   customer_id: string | null;
   vehicle_id: string | null;
   status: TicketStatus;
   subtotal: number;
   discount_total: number;
+  applied_coupon_ids?: string | null;
+  free_oil_change_redeemed?: number;
   tax_total: number;
   fee_total: number;
   total: number;
@@ -19,10 +22,16 @@ export interface Ticket {
   technician_notes: string | null;
   internal_notes: string | null;
   bay: string | null;
+  check_in_id?: string | null;
   started_at?: string | null;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  external_source?: string | null;
+  external_id?: string | null;
+  is_imported?: number;
+  original_import_json?: string | null;
+  imported_at?: string | null;
   deleted_at: string | null;
   sync_status: string;
 }

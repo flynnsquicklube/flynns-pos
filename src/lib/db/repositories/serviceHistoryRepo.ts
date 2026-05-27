@@ -30,6 +30,19 @@ export async function createServiceHistory(input: ServiceHistoryInput): Promise<
   return history;
 }
 
+export async function serviceHistoryExistsForTicket(ticketId: string): Promise<boolean> {
+  const [row] = await query<{ count: number }>(
+    "SELECT COUNT(*) AS count FROM service_history WHERE ticket_id = ? AND deleted_at IS NULL",
+    [ticketId]
+  );
+  return (row?.count ?? 0) > 0;
+}
+
+export async function getServiceHistoryByTicket(ticketId: string): Promise<ServiceHistory | null> {
+  const rows = await query<ServiceHistory>("SELECT * FROM service_history WHERE ticket_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1", [ticketId]);
+  return rows[0] ?? null;
+}
+
 export async function getServiceHistoryByVehicle(vehicleId: string): Promise<ServiceHistory[]> {
   return query<ServiceHistory>("SELECT * FROM service_history WHERE vehicle_id = ? AND deleted_at IS NULL ORDER BY service_date DESC", [vehicleId]);
 }
@@ -79,7 +92,7 @@ export async function getLastOilFilterForVehicle(vehicleId: string): Promise<Las
         if (!item || typeof item !== "object") return false;
         const candidate = item as Record<string, unknown>;
         const text = `${String(candidate.name ?? "")} ${String(candidate.sku ?? "")} ${String(candidate.product_id ?? "")}`.toLowerCase();
-        return text.includes("filter");
+        return text.includes("filter") && (/\bof[\s-]?[a-z0-9]{2,8}\b/i.test(text) || Boolean(candidate.inventory_item_id) || Boolean(candidate.sku) || Boolean(candidate.product_id));
       }) as Record<string, unknown> | undefined;
       if (match) {
         return {

@@ -2,6 +2,7 @@ import type { OilFilterSuggestion } from "../services/oilFilterSuggestion";
 import type { Customer } from "../../../types/customer";
 import type { ServicePackage } from "../../../types/servicePackage";
 import type { Vehicle } from "../../../types/vehicle";
+import { defaultBusinessProfile } from "../../config/businessProfile";
 
 export interface WindowStickerPrintData {
   businessName: string;
@@ -39,13 +40,14 @@ export function buildWindowStickerData(input: {
   nextServiceMiles?: number;
   nextServiceMonths?: number;
   disclaimer?: string | null;
+  businessName?: string;
 }): WindowStickerPrintData {
   const now = new Date();
   const nextMiles = input.nextServiceMiles ?? 3000;
   const nextMonths = input.nextServiceMonths ?? 3;
   const currentMileage = Number(input.vehicle.mileage) || 0;
   return {
-    businessName: "Flynn's Quick Lube",
+    businessName: input.businessName ?? defaultBusinessProfile.business_name,
     ticketId: input.ticketId,
     date: now.toISOString(),
     customerName: `${input.customer.first_name} ${input.customer.last_name}`.trim(),

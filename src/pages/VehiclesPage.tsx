@@ -1,10 +1,12 @@
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
-import { countVehicleSearchResults, createVehicle, getVehicleById, getVehicleStats, listRecentVehicles, searchVehiclesAdvanced, updateVehicle, type VehicleSearchResult, type VehicleStats } from "../lib/db/repositories/vehiclesRepo";
+import { PageHeader } from "../components/ui/PageHeader";
+import { VehicleInfoLookupModal } from "../components/vehicle-info/VehicleInfoLookupModal";
+import { applyVehicleDecode, countVehicleSearchResults, createVehicle, getVehicleById, getVehicleStats, searchVehiclesAdvanced, updateVehicle, type VehicleQuickFilter, type VehicleSearchFilters, type VehicleSearchResult, type VehicleStats } from "../lib/db/repositories/vehiclesRepo";
 import { searchCustomersAdvanced } from "../lib/db/repositories/customersRepo";
 import { listTicketsWithDetails } from "../lib/db/repositories/ticketsRepo";
 import { getServiceHistoryByVehicle } from "../lib/db/repositories/serviceHistoryRepo";
@@ -14,6 +16,15 @@ import type { Customer } from "../types/customer";
 import type { TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
 import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
+import { decodeVinWithFallback, isVinDecodeEnabled } from "../lib/integrations/vinDecoder/vinDecoder.service";
+import type { NormalizedVehicleDecode } from "../lib/integrations/vinDecoder/vinDecoder.types";
+import { isFuelEconomyEnabled, searchEpaVehicleCandidates } from "../lib/integrations/fuelEconomy/fuelEconomy.service";
+import type { FuelEconomyVehicleCandidate } from "../lib/integrations/fuelEconomy/fuelEconomy.types";
+import { getOilCapacity, getOilFilters } from "../lib/integrations/parts/partFitment.service";
+import type { PartFitmentResult } from "../lib/integrations/parts/partFitment.types";
+import { getVehiclePunchCard, type VehiclePunchCard } from "../lib/domain/loyalty/punchCardRules";
+import { listPunchEvents, type VehiclePunchEvent } from "../lib/db/repositories/punchCardsRepo";
+import { saveVehicleInfoDefaults } from "../lib/db/repositories/vehicleInfoLookupRepo";
 
 interface VehiclesPageProps {
   initialVehicleId?: string;
@@ -24,7 +35,8 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [vehicles, setVehicles] = useState<VehicleSearchResult[]>([]);
-  const [stats, setStats] = useState<VehicleStats>({ totalVehicles: 0, importedVehicles: 0, recentVehicles: 0 });
+  const [stats, setStats] = useState<VehicleStats>({ totalVehicles: 0, importedVehicles: 0, recentVehicles: 0, vehiclesWithServiceHistory: 0 });
+  const [activeFilter, setActiveFilter] = useState<VehicleQuickFilter | null>(null);
   const [resultCount, setResultCount] = useState(0);
   const [offset, setOffset] = useState(0);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -35,13 +47,40 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
   const [form, setForm] = useState({ customer_id: "", year: "", make: "", model: "", vin: "", plate: "", plate_state: "OH", mileage: "", oil_type: "", notes: "" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [vinDecoderEnabled, setVinDecoderEnabled] = useState(false);
+  const [epaEnabled, setEpaEnabled] = useState(false);
+  const [vehicleDecode, setVehicleDecode] = useState<NormalizedVehicleDecode | null>(null);
+  const [vehicleDecoding, setVehicleDecoding] = useState(false);
+  const [epaMatches, setEpaMatches] = useState<FuelEconomyVehicleCandidate[]>([]);
+  const [epaLoading, setEpaLoading] = useState(false);
+  const [fitment, setFitment] = useState<PartFitmentResult | null>(null);
+  const [punchCard, setPunchCard] = useState<VehiclePunchCard | null>(null);
+  const [punchEvents, setPunchEvents] = useState<VehiclePunchEvent[]>([]);
+  const [vehicleInfoLookupOpen, setVehicleInfoLookupOpen] = useState(false);
   const { notify } = useToast();
+
+  const filtersFor = useCallback((filter: VehicleQuickFilter | null): VehicleSearchFilters => ({
+    recent: filter === "recent",
+    imported: filter === "imported",
+    withHistory: filter === "withHistory",
+    openTickets: filter === "openTickets"
+  }), []);
 
   const loadVehicles = useCallback((nextOffset = 0, append = false) => {
     setLoading(true);
     const query = debouncedSearch.trim();
-    const listPromise = query ? searchVehiclesAdvanced(query, 50, nextOffset) : listRecentVehicles(10);
-    const countPromise = query ? countVehicleSearchResults(query) : Promise.resolve(10);
+    const hasSearchOrFilter = Boolean(query || activeFilter);
+    if (!hasSearchOrFilter) {
+      setVehicles([]);
+      setResultCount(0);
+      setOffset(0);
+      if (!initialVehicleId) setSelected(null);
+      setLoading(false);
+      return;
+    }
+    const filters = filtersFor(activeFilter);
+    const listPromise = searchVehiclesAdvanced(query, filters, 25, nextOffset);
+    const countPromise = countVehicleSearchResults(query, filters);
     Promise.all([listPromise, countPromise])
       .then(([rows, count]) => {
         setVehicles((current) => append ? [...current, ...rows] : rows);
@@ -50,7 +89,7 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to load vehicles."))
       .finally(() => setLoading(false));
-  }, [debouncedSearch]);
+  }, [activeFilter, debouncedSearch, filtersFor, initialVehicleId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 250);
@@ -63,15 +102,32 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
 
   useEffect(() => {
     void getVehicleStats().then(setStats).catch(() => undefined);
+    isVinDecodeEnabled().then(setVinDecoderEnabled).catch(() => setVinDecoderEnabled(false));
+    isFuelEconomyEnabled().then(setEpaEnabled).catch(() => setEpaEnabled(false));
   }, []);
 
   useEffect(() => {
+    if (!showAdd && !selected) return;
+    if (customers.length) return;
     searchCustomersAdvanced("", {}, 100, 0).then(setCustomers).catch(() => setCustomers([]));
-  }, []);
+  }, [customers.length, selected, showAdd]);
 
   const load = () => loadVehicles(0, false);
+  const hasSearchOrFilter = Boolean(debouncedSearch.trim() || activeFilter);
+  const filterButtons: { key: VehicleQuickFilter; label: string }[] = [
+    { key: "recent", label: "Recent" },
+    { key: "imported", label: "Imported" },
+    { key: "withHistory", label: "With History" },
+    { key: "openTickets", label: "Open Tickets" }
+  ];
+
   const openVehicle = useCallback(async (vehicle: Vehicle) => {
     setSelected(vehicle);
+    setVehicleDecode(null);
+    setEpaMatches([]);
+    setFitment(null);
+    setPunchCard(null);
+    setPunchEvents([]);
     setForm({
       customer_id: vehicle.customer_id,
       year: vehicle.year ? String(vehicle.year) : "",
@@ -87,7 +143,103 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
     const [vehicleTickets, serviceHistory] = await Promise.all([listTicketsWithDetails({ includeCompletedTodayOnly: false }), getServiceHistoryByVehicle(vehicle.id)]);
     setTickets(vehicleTickets.filter((ticket) => ticket.vehicle_id === vehicle.id));
     setHistory(serviceHistory);
+    setPunchCard(await getVehiclePunchCard(vehicle.id));
+    setPunchEvents(await listPunchEvents(vehicle.id));
+    const [filters, capacity] = await Promise.all([
+      getOilFilters({ vehicleId: vehicle.id, vin: vehicle.vin, year: vehicle.year, make: vehicle.make, model: vehicle.model, engine: vehicle.engine_model }).catch(() => null),
+      getOilCapacity({ vehicleId: vehicle.id, vin: vehicle.vin, year: vehicle.year, make: vehicle.make, model: vehicle.model, engine: vehicle.engine_model }).catch(() => null)
+    ]);
+    setFitment(filters ?? capacity ? { ok: true, status: "ready", message: "Local fitment loaded.", parts: filters?.parts ?? [], specs: capacity?.specs ?? [] } : null);
   }, []);
+
+  const decodeSelectedVehicle = async (forceRefresh = true) => {
+    const vin = form.vin || selected?.vin;
+    if (!selected || !vin) {
+      notify({ tone: "error", title: "VIN required", message: "Save or enter a VIN before decoding." });
+      return;
+    }
+    if (!vinDecoderEnabled) {
+      notify({ tone: "info", title: "VIN decoder disabled", message: "Continue with manual vehicle specs." });
+      return;
+    }
+    setVehicleDecoding(true);
+    try {
+      const result = await decodeVinWithFallback(vin, { modelYear: form.year || selected.year || null, forceRefresh });
+      if (result.ok && result.data) {
+        setVehicleDecode(result.data);
+        notify({ tone: "success", title: "VIN decoded", message: [result.data.year, result.data.make, result.data.model].filter(Boolean).join(" ") || result.data.vin });
+      } else {
+        notify({ tone: "error", title: "VIN decode unavailable", message: result.message });
+      }
+    } finally {
+      setVehicleDecoding(false);
+    }
+  };
+
+  const applySelectedDecode = async (overwrite = false) => {
+    if (!selected || !vehicleDecode) return;
+    if (overwrite && !window.confirm("Overwrite existing vehicle fields with decoded VIN data?")) return;
+    await applyVehicleDecode(selected.id, vehicleDecode, overwrite);
+    const updated = await getVehicleById(selected.id);
+    if (updated) await openVehicle(updated);
+    notify({ tone: "success", title: "Decoded data applied", message: overwrite ? "Vehicle fields were refreshed." : "Empty vehicle fields were filled." });
+  };
+
+  const enrichWithEpa = async () => {
+    if (!selected?.year || !selected.make || !selected.model) {
+      notify({ tone: "error", title: "Vehicle specs needed", message: "Year, make, and model are required for EPA matching." });
+      return;
+    }
+    setEpaLoading(true);
+    try {
+      const result = await searchEpaVehicleCandidates(selected.year, selected.make, selected.model);
+      setEpaMatches(result.data ?? []);
+      notify({ tone: result.ok ? "success" : "error", title: result.ok ? "EPA matches loaded" : "EPA lookup failed", message: result.message });
+    } finally {
+      setEpaLoading(false);
+    }
+  };
+
+  const applyEpaMatch = async (match: FuelEconomyVehicleCandidate, overwrite = false) => {
+    if (!selected) return;
+    if (overwrite && !window.confirm("Overwrite existing vehicle fields with EPA data?")) return;
+    const current = await getVehicleById(selected.id);
+    if (!current) return;
+    await updateVehicle(selected.id, {
+      customer_id: current.customer_id,
+      vin: current.vin,
+      plate: current.plate,
+      plate_state: current.plate_state,
+      year: overwrite ? match.year ?? current.year : current.year ?? match.year,
+      make: overwrite ? match.make ?? current.make : current.make ?? match.make,
+      model: overwrite ? match.model ?? current.model : current.model ?? match.model,
+      mileage: current.mileage,
+      oil_type: current.oil_type,
+      notes: current.notes
+    });
+    const updated = await getVehicleById(selected.id);
+    if (updated) await openVehicle(updated);
+    notify({ tone: "success", title: "EPA data applied", message: "Basic vehicle fields were updated where safe." });
+  };
+
+  const clearServiceDefaults = async () => {
+    if (!selected) return;
+    if (!window.confirm("Clear saved service defaults for this vehicle?")) return;
+    await saveVehicleInfoDefaults(selected.id, {
+      oil_type: null,
+      oil_capacity: null,
+      oil_filter_sku: null,
+      oil_filter_inventory_item_id: null,
+      air_filter_sku: null,
+      cabin_filter_sku: null,
+      vehicle_info_notes: null,
+      vehicle_info_source_url: null,
+      vehicle_info_source_title: null
+    });
+    const updated = await getVehicleById(selected.id);
+    if (updated) await openVehicle(updated);
+    notify({ tone: "success", title: "Defaults cleared", message: "Vehicle service defaults were cleared." });
+  };
 
   useEffect(() => {
     if (!initialVehicleId) return;
@@ -131,28 +283,49 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-slate-950">Vehicles</h2>
-          <p className="text-sm text-slate-500">Vehicle records stored locally.</p>
-        </div>
+        <PageHeader className="flex-1" title="Vehicles" subtitle="Find vehicles by VIN, plate, customer, or service history." />
         <Button variant="secondary" icon={<Plus size={16} />} onClick={() => { setShowAdd(true); setSelected(null); setForm({ customer_id: customers[0]?.id ?? "", year: "", make: "", model: "", vin: "", plate: "", plate_state: "OH", mileage: "", oil_type: "", notes: "" }); }}>Add Vehicle</Button>
       </div>
-      <Input inputSize="touch" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search VIN, plate, year, make, model, or customer..." />
-      {!debouncedSearch.trim() ? (
-        <div className="grid gap-4 md:grid-cols-3">
-          <Card className="p-4"><div className="text-sm text-slate-500">Total Vehicles</div><div className="mt-2 text-3xl font-black text-slate-950">{stats.totalVehicles}</div></Card>
-          <Card className="p-4"><div className="text-sm text-slate-500">Imported</div><div className="mt-2 text-3xl font-black text-slate-950">{stats.importedVehicles}</div></Card>
-          <Card className="p-4"><div className="text-sm text-slate-500">Recent</div><div className="mt-2 text-3xl font-black text-slate-950">{stats.recentVehicles}</div></Card>
+      <Card className="p-5">
+        <div className="relative">
+          <Search className="absolute left-4 top-4 text-[var(--pos-muted)]" size={21} />
+          <Input inputSize="touch" className="pl-12 text-lg" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search VIN, plate, year, make, model, or customer..." />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {filterButtons.map((filter) => (
+            <Button key={filter.key} variant={activeFilter === filter.key ? "primary" : "secondary"} onClick={() => setActiveFilter((current) => current === filter.key ? null : filter.key)}>
+              {filter.label}
+            </Button>
+          ))}
+        </div>
+      </Card>
+      {!hasSearchOrFilter ? (
+        <div className="grid gap-4 md:grid-cols-4">
+          <Card className="p-4"><div className="text-sm text-[var(--pos-muted)]">Total Vehicles</div><div className="mt-2 text-3xl font-black text-[var(--pos-text)]">{stats.totalVehicles}</div></Card>
+          <Card className="p-4"><div className="text-sm text-[var(--pos-muted)]">Imported</div><div className="mt-2 text-3xl font-black text-[var(--pos-text)]">{stats.importedVehicles}</div></Card>
+          <Card className="p-4"><div className="text-sm text-[var(--pos-muted)]">With Service History</div><div className="mt-2 text-3xl font-black text-[var(--pos-text)]">{stats.vehiclesWithServiceHistory}</div></Card>
+          <Card className="p-4"><div className="text-sm text-[var(--pos-muted)]">Recent</div><div className="mt-2 text-3xl font-black text-[var(--pos-text)]">{stats.recentVehicles}</div></Card>
         </div>
       ) : null}
+      {!hasSearchOrFilter ? (
+        <Card className="p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] text-[var(--pos-blue-2)]">
+            <Search size={24} />
+          </div>
+          <h2 className="mt-4 text-xl font-black text-[var(--pos-text)]">Search to view vehicles</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-[var(--pos-muted)]">
+            Enter VIN, plate, year, make, model, or customer name to find vehicle records.
+          </p>
+        </Card>
+      ) : null}
       {error ? <Card className="p-4 text-sm text-red-200">{error}</Card> : null}
-      <Card className="p-4">
+      {hasSearchOrFilter ? <Card className="p-4">
         <div className="mb-3 flex items-center justify-between text-sm text-slate-500">
-          <span>{debouncedSearch.trim() ? `${resultCount} matching vehicle${resultCount === 1 ? "" : "s"}` : "Recent vehicles"}</span>
+          <span>{resultCount} matching vehicle{resultCount === 1 ? "" : "s"}</span>
           {loading ? <span>Searching...</span> : null}
         </div>
         {vehicles.length === 0 ? (
-          <EmptyState title={loading ? "Loading vehicles" : "No vehicles yet"} message="Customer vehicles will appear here once created." />
+          <EmptyState title={loading ? "Loading vehicles" : "No vehicles found"} message="Try another VIN, plate, year, make, model, or customer." />
         ) : (
           <div className="divide-y divide-white/10">
             {vehicles.map((vehicle) => (
@@ -166,12 +339,12 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
             ))}
           </div>
         )}
-        {debouncedSearch.trim() && vehicles.length < resultCount ? (
+        {hasSearchOrFilter && vehicles.length < resultCount ? (
           <div className="border-t border-slate-200 pt-4 text-center">
             <Button variant="secondary" disabled={loading} onClick={() => loadVehicles(offset, true)}>Load More</Button>
           </div>
         ) : null}
-      </Card>
+      </Card> : null}
       {(selected || showAdd) ? (
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -198,6 +371,116 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
           <Button className="mt-3" onClick={saveVehicle}>{selected ? "Save Vehicle" : "Create Vehicle"}</Button>
           {selected ? (
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 p-4 lg:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-950">Vehicle Service Defaults</div>
+                    <div className="text-sm text-slate-500">Oil capacity, oil type, and filter defaults are used as suggestions on future tickets.</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={() => setVehicleInfoLookupOpen(true)}>Lookup Vehicle Info</Button>
+                    <Button variant="secondary" onClick={clearServiceDefaults}>Clear Defaults</Button>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+                  <span className="rounded-lg bg-slate-50 p-3">Oil capacity: <strong>{selected.oil_capacity ? `${selected.oil_capacity} qt` : "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-slate-50 p-3">Oil type: <strong>{selected.oil_type ?? "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-slate-50 p-3">Oil filter: <strong>{selected.oil_filter_sku ?? "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-slate-50 p-3">Air filter: <strong>{selected.air_filter_sku ?? "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-slate-50 p-3">Cabin filter: <strong>{selected.cabin_filter_sku ?? "Not saved"}</strong></span>
+                  <span className="rounded-lg bg-slate-50 p-3">Verified: <strong>{selected.vehicle_info_verified_at ? new Date(selected.vehicle_info_verified_at).toLocaleDateString() : "Not verified"}</strong></span>
+                </div>
+                {selected.vehicle_info_source_title || selected.vehicle_info_notes ? (
+                  <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                    {selected.vehicle_info_source_title ? <div><strong>Source:</strong> {selected.vehicle_info_source_title}</div> : null}
+                    {selected.vehicle_info_notes ? <div className="mt-1"><strong>Notes:</strong> {selected.vehicle_info_notes}</div> : null}
+                  </div>
+                ) : null}
+              </div>
+              <div className="rounded-lg border border-slate-200 p-4 lg:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-950">VIN Decoder</div>
+                    <div className="text-sm text-slate-500">
+                      {selected.vin ? `VIN ${selected.vin}` : "No VIN saved."} {selected.vin_decoded_at ? `· Last decoded ${new Date(selected.vin_decoded_at).toLocaleDateString()}` : ""}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {vinDecoderEnabled ? (
+                      <Button variant="secondary" disabled={!selected.vin || vehicleDecoding} onClick={() => void decodeSelectedVehicle(true)}>
+                        {vehicleDecoding ? "Decoding..." : selected.vin_decoded_at ? "Refresh Decode" : "Decode VIN"}
+                      </Button>
+                    ) : null}
+                    <Button variant="secondary" disabled={!vehicleDecode} onClick={() => void applySelectedDecode(false)}>Apply Empty Fields</Button>
+                    <Button variant="secondary" disabled={!vehicleDecode} onClick={() => void applySelectedDecode(true)}>Overwrite Existing</Button>
+                  </div>
+                </div>
+                {vehicleDecode ? (
+                  <div className="mt-4 grid gap-2 rounded-lg bg-slate-50 p-3 text-sm md:grid-cols-3">
+                    <span><strong>{vehicleDecode.year ?? "-"}</strong> {vehicleDecode.make ?? ""} {vehicleDecode.model ?? ""} {vehicleDecode.trim ?? ""}</span>
+                    <span>Engine: {vehicleDecode.engineModel ?? vehicleDecode.engineDisplacementL ?? "-"}</span>
+                    <span>Fuel/drive: {[vehicleDecode.fuelType, vehicleDecode.driveType].filter(Boolean).join(" / ") || "-"}</span>
+                    <span>Body: {vehicleDecode.bodyClass ?? "-"}</span>
+                    <span>Manufacturer: {vehicleDecode.manufacturer ?? "-"}</span>
+                    <span>Source: {vehicleDecode.source} · {vehicleDecode.confidence}</span>
+                  </div>
+                ) : selected.vin_decode_source ? (
+                  <div className="mt-4 grid gap-2 rounded-lg bg-slate-50 p-3 text-sm md:grid-cols-3">
+                    <span>Trim: {selected.trim ?? "-"}</span>
+                    <span>Engine: {selected.engine_model ?? selected.engine_displacement_l ?? "-"}</span>
+                    <span>Source: {selected.vin_decode_source} · {selected.vin_decode_confidence ?? "unknown"}</span>
+                  </div>
+                ) : null}
+              </div>
+              <div className="rounded-lg border border-slate-200 p-4 lg:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-bold text-slate-950">External & Local Vehicle Data</div>
+                    <div className="text-sm text-slate-500">Local history is always available. EPA matching appears only when enabled in Settings.</div>
+                  </div>
+                  {epaEnabled ? <Button variant="secondary" disabled={epaLoading} onClick={() => void enrichWithEpa()}>{epaLoading ? "Searching..." : "Enrich EPA Data"}</Button> : null}
+                </div>
+                {fitment ? (
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg bg-slate-50 p-3 text-sm">
+                      <div className="font-bold text-slate-900">Local Fitment Suggestions</div>
+                      {fitment.parts.slice(0, 4).map((part) => <div key={`${part.source}-${part.sku ?? part.name}`} className="mt-2 text-slate-600">{part.name} {part.sku ? `· ${part.sku}` : ""} · {part.source}</div>)}
+                      {!fitment.parts.length ? <div className="mt-2 text-slate-500">No prior parts found.</div> : null}
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-3 text-sm">
+                      <div className="font-bold text-slate-900">Service Specs From History</div>
+                      {fitment.specs?.map((spec) => <div key={`${spec.category}-${spec.source}`} className="mt-2 text-slate-600">{spec.category.replace("_", " ")}: {spec.value ?? "-"} {spec.unit ?? ""} · {spec.source}</div>)}
+                      {!fitment.specs?.length ? <div className="mt-2 text-slate-500">No prior oil capacity found.</div> : null}
+                    </div>
+                  </div>
+                ) : null}
+                {epaMatches.length ? (
+                  <div className="mt-4 divide-y divide-slate-200 rounded-lg border border-slate-200 text-sm">
+                    {epaMatches.slice(0, 5).map((match) => (
+                      <div key={match.epaVehicleId} className="grid gap-2 p-3 md:grid-cols-[1fr_1fr_auto]">
+                        <span className="font-semibold text-slate-800">{match.year} {match.make} {match.model} · {match.transmission ?? match.trim ?? "EPA option"}</span>
+                        <span className="text-slate-600">{match.fuelType ?? "-"} · {match.drive ?? "-"} · MPG {match.mpgCombined ?? "-"}</span>
+                        <Button size="sm" variant="secondary" onClick={() => void applyEpaMatch(match, false)}>Apply Empty</Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="rounded-lg border border-slate-200 p-4 lg:col-span-2">
+                <div className="font-bold text-slate-950">Loyalty Punch Card</div>
+                <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-3">
+                  <span>Current punches: <strong>{punchCard?.punch_count ?? 0}</strong></span>
+                  <span>Free rewards available: <strong>{punchCard?.free_rewards_available ?? 0}</strong></span>
+                  <span>Sync status: <strong>{punchCard?.sync_status ?? "No local punch card yet"}</strong></span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full bg-[var(--brand-primary)]" style={{ width: `${Math.min(((punchCard?.punch_count ?? 0) / 5) * 100, 100)}%` }} />
+                </div>
+                <div className="mt-3 space-y-1 text-sm text-slate-500">
+                  {punchEvents.slice(0, 5).map((event) => <div key={event.id}>{new Date(event.created_at).toLocaleDateString()} · {event.event_type} · punch {event.punch_delta} · reward {event.reward_delta}</div>)}
+                  {!punchEvents.length ? <div>No punch history yet.</div> : null}
+                </div>
+              </div>
               <div className="rounded-lg border border-slate-200 p-4">
                 <div className="font-bold text-slate-950">Tickets ({tickets.length})</div>
                 <div className="mt-3 space-y-2 text-sm">{tickets.slice(0, 8).map((ticket) => <div key={ticket.id}>{ticket.status} · {ticket.service_names ?? "Ticket"} · {new Date(ticket.created_at).toLocaleDateString()}</div>)}</div>
@@ -209,6 +492,36 @@ export function VehiclesPage({ initialVehicleId, onStartTicket }: VehiclesPagePr
             </div>
           ) : null}
         </Card>
+      ) : null}
+      {selected ? (
+        <VehicleInfoLookupModal
+          open={vehicleInfoLookupOpen}
+          context={{
+            vehicleId: selected.id,
+            vehicle: selected,
+            vin: selected.vin,
+            year: selected.year,
+            make: selected.make,
+            model: selected.model,
+            engine: selected.engine_model
+          }}
+          currentDefaults={{
+            oil_type: selected.oil_type,
+            oil_capacity: selected.oil_capacity,
+            oil_filter_sku: selected.oil_filter_sku,
+            oil_filter_inventory_item_id: selected.oil_filter_inventory_item_id,
+            air_filter_sku: selected.air_filter_sku,
+            cabin_filter_sku: selected.cabin_filter_sku,
+            vehicle_info_notes: selected.vehicle_info_notes,
+            vehicle_info_source_url: selected.vehicle_info_source_url,
+            vehicle_info_source_title: selected.vehicle_info_source_title
+          }}
+          onClose={() => setVehicleInfoLookupOpen(false)}
+          onSaved={async () => {
+            const updated = await getVehicleById(selected.id);
+            if (updated) await openVehicle(updated);
+          }}
+        />
       ) : null}
     </section>
   );

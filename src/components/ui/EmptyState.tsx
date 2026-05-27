@@ -8,9 +8,9 @@ interface EmptyStateProps {
 
 export function EmptyState({ title, message, action }: EmptyStateProps) {
   return (
-    <div className="flex min-h-44 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--brand-border)] bg-slate-50 p-8 text-center">
-      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-      <p className="mt-2 max-w-md text-sm text-slate-500">{message}</p>
+    <div className="flex min-h-32 flex-col items-center justify-center rounded-[var(--pos-radius-lg)] border border-dashed border-[var(--pos-border)] bg-[var(--pos-panel)]/70 p-6 text-center">
+      <h3 className="text-base font-black text-[var(--pos-text)]">{title}</h3>
+      <p className="mt-2 max-w-md text-sm text-[var(--pos-muted)]">{message}</p>
       {action ? <div className="mt-5">{action}</div> : null}
     </div>
   );

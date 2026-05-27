@@ -1,4 +1,5 @@
 import { looksLikeVin } from "../../domain/search/globalSearch";
+import { normalizePlate } from "../../domain/vehicles/plateUtils";
 import { normalizePhone } from "../../utils/phone";
 import { query } from "../sqlite";
 
@@ -63,6 +64,8 @@ export async function globalSearch(searchQuery: string, options: GlobalSearchOpt
   const phoneDigits = normalizePhone(trimmed);
   const phoneLike = `%${phoneDigits}%`;
   const vinExact = looksLikeVin(trimmed) ? trimmed.toUpperCase() : null;
+  const plateSearch = normalizePlate(trimmed);
+  const plateLike = `%${plateSearch}%`;
   const customerLimit = options.customerLimit ?? 10;
   const vehicleLimit = options.vehicleLimit ?? 10;
   const ticketLimit = options.ticketLimit ?? 5;
@@ -83,12 +86,12 @@ export async function globalSearch(searchQuery: string, options: GlobalSearchOpt
           SELECT 1 FROM vehicles v
           WHERE v.customer_id = c.id
             AND v.deleted_at IS NULL
-            AND (v.vin LIKE ? OR v.plate LIKE ? OR CAST(v.year AS TEXT) LIKE ? OR v.make LIKE ? OR v.model LIKE ?)
+            AND (v.vin LIKE ? OR REPLACE(UPPER(COALESCE(v.plate, '')), ' ', '') LIKE ? OR CAST(v.year AS TEXT) LIKE ? OR v.make LIKE ? OR v.model LIKE ?)
         )
        )
      ORDER BY c.updated_at DESC
      LIMIT ?`,
-    [like, like, like, like, like, phoneDigits, phoneLike, like, like, like, like, like, customerLimit]
+    [like, like, like, like, like, phoneDigits, phoneLike, like, plateLike, like, like, like, customerLimit]
   );
 
   const vehicles = await query<GlobalVehicleResult>(
@@ -100,7 +103,7 @@ export async function globalSearch(searchQuery: string, options: GlobalSearchOpt
        AND (
         (? IS NOT NULL AND UPPER(v.vin) = ?)
         OR v.vin LIKE ?
-        OR v.plate LIKE ?
+        OR REPLACE(UPPER(COALESCE(v.plate, '')), ' ', '') LIKE ?
         OR CAST(v.year AS TEXT) LIKE ?
         OR v.make LIKE ?
         OR v.model LIKE ?
@@ -109,9 +112,15 @@ export async function globalSearch(searchQuery: string, options: GlobalSearchOpt
         OR (c.first_name || ' ' || c.last_name) LIKE ?
         OR (? != '' AND ${phoneSql("c.phone")} LIKE ?)
        )
-     ORDER BY CASE WHEN ? IS NOT NULL AND UPPER(v.vin) = ? THEN 0 ELSE 1 END, v.updated_at DESC
+     ORDER BY
+       CASE
+        WHEN ? IS NOT NULL AND UPPER(v.vin) = ? THEN 0
+        WHEN ? != '' AND REPLACE(UPPER(COALESCE(v.plate, '')), ' ', '') = ? THEN 1
+        ELSE 2
+       END,
+       v.updated_at DESC
      LIMIT ?`,
-    [vinExact, vinExact, like, like, like, like, like, like, like, like, phoneDigits, phoneLike, vinExact, vinExact, vehicleLimit]
+    [vinExact, vinExact, like, plateLike, like, like, like, like, like, like, phoneDigits, phoneLike, vinExact, vinExact, plateSearch, plateSearch, vehicleLimit]
   );
 
   const tickets = await query<GlobalTicketResult>(
@@ -131,7 +140,7 @@ export async function globalSearch(searchQuery: string, options: GlobalSearchOpt
         OR c.last_name LIKE ?
         OR (c.first_name || ' ' || c.last_name) LIKE ?
         OR v.vin LIKE ?
-        OR v.plate LIKE ?
+        OR REPLACE(UPPER(COALESCE(v.plate, '')), ' ', '') LIKE ?
         OR CAST(v.year AS TEXT) LIKE ?
         OR v.make LIKE ?
         OR v.model LIKE ?
@@ -139,7 +148,7 @@ export async function globalSearch(searchQuery: string, options: GlobalSearchOpt
        )
      ORDER BY COALESCE(t.completed_at, t.created_at) DESC
      LIMIT ?`,
-    [like, like, like, like, like, like, like, like, like, like, phoneDigits, phoneLike, ticketLimit]
+    [like, like, like, like, like, like, plateLike, like, like, like, phoneDigits, phoneLike, ticketLimit]
   );
 
   return { customers, vehicles, tickets };

@@ -19,7 +19,19 @@ export function PackageSelectionsSummary({ servicePackage, pricing, selectedOilF
     ? "Customer supplied filter"
     : filterChoice === "no_filter"
       ? "No filter"
-      : selectedOilFilter?.sku ?? selectedOilFilter?.productId ?? selectedOilFilter?.name ?? "Not selected";
+      : filterChoice === "standard_unmatched"
+        ? "Standard filter - inventory item not selected"
+        : selectedOilFilter?.sku ?? selectedOilFilter?.productId ?? selectedOilFilter?.name ?? "Not selected";
+  const filterDescription = selectedOilFilter?.name
+    ? `${selectedOilFilter.name}${selectedOilFilter.brand ? ` · ${selectedOilFilter.brand}` : ""}`
+    : filterChoice === "customer_supplied"
+      ? "Customer supplied"
+      : filterChoice === "no_filter"
+        ? "No filter charged"
+        : "Select an inventory filter to charge the part";
+  const filterPricingLabel = pricing.oilFilterTotal > 0
+    ? `1 EA × ${formatMoney(pricing.oilFilterTotal)} = ${formatMoney(pricing.oilFilterTotal)}`
+    : "$0.00";
   return (
     <aside className="sticky top-4 h-fit rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-5">
       <h3 className="text-xl font-black text-[var(--pos-text)]">Package Selections</h3>
@@ -27,7 +39,8 @@ export function PackageSelectionsSummary({ servicePackage, pricing, selectedOilF
       <div className="mt-5 space-y-3 text-sm">
         <div className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-card)] p-3">
           <div className="font-black text-[var(--pos-text)]">Engine Oil Filter Remove & Replace</div>
-          <div className="mt-1 text-[var(--pos-muted)]">{filterLabel} · 1 EA · Included</div>
+          <div className="mt-1 text-[var(--pos-muted)]">{filterLabel} · Retail · {filterPricingLabel}</div>
+          <div className="mt-1 text-xs text-[var(--pos-muted)]">{filterDescription}</div>
         </div>
         <div className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-card)] p-3">
           <div className="font-black text-[var(--pos-text)]">Engine Oil Drain & Refill</div>
@@ -42,8 +55,9 @@ export function PackageSelectionsSummary({ servicePackage, pricing, selectedOilF
       ) : null}
       <div className="mt-5 space-y-2 border-t border-[var(--pos-border)] pt-4 text-sm">
         <div className="flex justify-between text-[var(--pos-muted)]"><span>Package</span><span className="font-bold text-[var(--pos-text)]">{formatMoney(pricing.packageBase)}</span></div>
+        <div className="flex justify-between text-[var(--pos-muted)]"><span>Oil filter</span><span className="font-bold text-[var(--pos-text)]">{formatMoney(pricing.oilFilterTotal)}</span></div>
         <div className="flex justify-between text-[var(--pos-muted)]"><span>Extra quarts</span><span className="font-bold text-[var(--pos-text)]">{formatMoney(pricing.extraQuartTotal)}</span></div>
-        <div className="flex justify-between text-[var(--pos-muted)]"><span>Filter fee</span><span className="font-bold text-[var(--pos-text)]">{formatMoney(pricing.filterFee)}</span></div>
+        <div className="flex justify-between text-[var(--pos-muted)]"><span>Cartridge fee</span><span className="font-bold text-[var(--pos-text)]">{formatMoney(pricing.filterFee)}</span></div>
         <div className="flex justify-between text-[var(--pos-muted)]"><span>Tax estimate</span><span className="font-bold text-[var(--pos-text)]">{formatMoney(pricing.taxTotal)}</span></div>
         <div className="flex justify-between text-xl font-black text-[var(--pos-blue-2)]"><span>Total</span><span>{formatMoney(pricing.total)}</span></div>
       </div>

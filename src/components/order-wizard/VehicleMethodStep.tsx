@@ -1,14 +1,16 @@
-import { BadgeCheck, CarFront, Keyboard } from "lucide-react";
+import { BadgeCheck, CarFront, Keyboard, UserSearch } from "lucide-react";
 import { Card } from "../ui/Card";
 
 interface VehicleMethodStepProps {
+  onSelectCustomer: () => void;
   onSelectVin: () => void;
   onSelectPlate: () => void;
   onSelectManual: () => void;
 }
 
-export function VehicleMethodStep({ onSelectVin, onSelectPlate, onSelectManual }: VehicleMethodStepProps) {
+export function VehicleMethodStep({ onSelectCustomer, onSelectVin, onSelectPlate, onSelectManual }: VehicleMethodStepProps) {
   const options = [
+    { label: "Customer / Phone", helper: "Find by name, phone, email, VIN, or plate.", icon: UserSearch, onClick: onSelectCustomer },
     { label: "VIN", helper: "Scan or type the VIN barcode.", icon: BadgeCheck, onClick: onSelectVin },
     { label: "License Plate", helper: "Search by plate and state.", icon: CarFront, onClick: onSelectPlate },
     { label: "Manual Entry", helper: "Enter year, make, model, and mileage.", icon: Keyboard, onClick: onSelectManual }
@@ -18,10 +20,10 @@ export function VehicleMethodStep({ onSelectVin, onSelectPlate, onSelectManual }
     <div className="flex min-h-[520px] items-center justify-center">
       <Card className="w-full max-w-4xl p-10">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-slate-950">Choose Vehicle Identification Method</h1>
-          <p className="mt-2 text-sm text-slate-500">Start with the fastest identifier available at the service counter.</p>
+          <h1 className="text-3xl font-bold text-slate-950">Choose a Starting Point</h1>
+          <p className="mt-2 text-sm text-slate-500">Start with the fastest information available at the service counter.</p>
         </div>
-        <div className="mx-auto mt-9 grid max-w-4xl gap-5 md:grid-cols-3">
+        <div className="mx-auto mt-9 grid max-w-4xl gap-5 md:grid-cols-2">
           {options.map((option) => {
             const Icon = option.icon;
             return (

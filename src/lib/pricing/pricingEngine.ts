@@ -24,6 +24,9 @@ export interface PackagePricingInput {
   selectedPackage: ServicePackage | null;
   actualQuarts: number;
   filterType: PackageFilterType;
+  oilFilterPrice?: number;
+  oilFilterCost?: number;
+  oilFilterTaxable?: number;
   addons: PackageAddonInput[];
   taxRate: number;
 }
@@ -34,6 +37,9 @@ export interface PackagePricingBreakdown {
   actualQuarts: number;
   extraQuarts: number;
   extraQuartTotal: number;
+  oilFilterTotal: number;
+  selectedFilterRetailPrice: number;
+  selectedFilterCost: number;
   filterFee: number;
   addonsTotal: number;
   feesTotal: number;
@@ -93,11 +99,12 @@ export function catalogItemToAddon(item: ServiceCatalogItem, quantity = 1): Pack
 
 export function calculatePackagePricing(input: PackagePricingInput): PackagePricingBreakdown {
   const taxRate = normalizeTaxRate(input.taxRate);
-  const packageBase = roundMoney(input.selectedPackage?.base_price ?? 0);
+  const packageBase = roundMoney(input.selectedPackage?.package_total ?? input.selectedPackage?.base_price ?? 0);
   const includedQuarts = input.selectedPackage?.included_quarts ?? 0;
   const actualQuarts = Math.max(Number(input.actualQuarts) || 0, 0);
   const extraQuarts = input.selectedPackage ? roundMoney(Math.max(0, actualQuarts - includedQuarts)) : 0;
   const extraQuartTotal = roundMoney(extraQuarts * (input.selectedPackage?.extra_quart_price ?? 0));
+  const oilFilterTotal = roundMoney(Math.max(Number(input.oilFilterPrice) || 0, 0));
   const filterFee = input.selectedPackage && input.filterType === "cartridge" ? roundMoney(input.selectedPackage.cartridge_filter_extra_fee) : 0;
   const addonsTotal = roundMoney(
     input.addons.reduce((sum, addon) => sum + (addon.is_fee || addon.is_discount ? 0 : addon.quantity * addon.unit_price), 0)
@@ -106,12 +113,13 @@ export function calculatePackagePricing(input: PackagePricingInput): PackagePric
   const discountsTotal = roundMoney(input.addons.reduce((sum, addon) => sum + (addon.is_discount ? Math.abs(addon.quantity * addon.unit_price) : 0), 0));
   const taxableSubtotalBeforeDiscount = roundMoney(
     (input.selectedPackage?.taxable ? packageBase + extraQuartTotal + filterFee : 0) +
+      (input.oilFilterTaxable === 0 ? 0 : oilFilterTotal) +
       input.addons.reduce((sum, addon) => {
         if (!addon.taxable || addon.is_discount) return sum;
         return sum + addon.quantity * addon.unit_price;
       }, 0)
   );
-  const subtotalBeforeDiscount = roundMoney(packageBase + extraQuartTotal + filterFee + addonsTotal + feesTotal - filterFee);
+  const subtotalBeforeDiscount = roundMoney(packageBase + oilFilterTotal + extraQuartTotal + filterFee + addonsTotal + feesTotal - filterFee);
   const subtotal = roundMoney(Math.max(subtotalBeforeDiscount - discountsTotal, 0));
   const taxableSubtotal = roundMoney(Math.max(taxableSubtotalBeforeDiscount - discountsTotal, 0));
   const taxTotal = roundMoney(taxableSubtotal * taxRate);
@@ -121,6 +129,9 @@ export function calculatePackagePricing(input: PackagePricingInput): PackagePric
     actualQuarts,
     extraQuarts,
     extraQuartTotal,
+    oilFilterTotal,
+    selectedFilterRetailPrice: oilFilterTotal,
+    selectedFilterCost: roundMoney(Math.max(Number(input.oilFilterCost) || 0, 0)),
     filterFee,
     addonsTotal,
     feesTotal,

@@ -1,17 +1,76 @@
-export interface CustomerSyncPayload { customerId: string; firstName: string; lastName: string; phone: string; email?: string | null; }
-export interface VehicleSyncPayload { vehicleId: string; customerId: string; mileage?: number | null; oilType?: string | null; }
-export interface CompletedServiceSyncPayload { ticketId: string; customerId: string; vehicleId: string; completedAt: string; total: number; services: unknown[]; }
-export interface CouponSyncPayload { customerId: string; code: string; status: string; }
-export interface ReferralRewardSyncPayload { referrerCustomerId: string; referredCustomerId?: string; rewardStatus: string; }
-export interface PunchCardSyncPayload { customerId: string; punchCount: number; rewardEarned: boolean; }
-export interface CheckInSyncPayload { customerId: string; vehicleId: string; status: string; }
+export type LoyaltySyncEventType =
+  | "customer_upsert"
+  | "vehicle_upsert"
+  | "completed_service"
+  | "punch_added"
+  | "free_oil_change_earned"
+  | "free_oil_change_redeemed"
+  | "referral_completed"
+  | "referral_coupon_issued"
+  | "coupon_assigned"
+  | "coupon_redeemed"
+  | "check_in_completed"
+  | "check_in_canceled";
 
-export type LoyaltySyncPayload =
-  | CustomerSyncPayload
-  | VehicleSyncPayload
-  | CompletedServiceSyncPayload
-  | CouponSyncPayload
-  | ReferralRewardSyncPayload
-  | PunchCardSyncPayload
-  | CheckInSyncPayload;
+export type LoyaltySyncEntityType = "customer" | "vehicle" | "ticket" | "service_history" | "coupon" | "referral" | "check_in";
 
+export type LoyaltySyncStatus = "pending" | "processing" | "synced" | "failed" | "skipped";
+
+export interface LoyaltyPayloadBase {
+  localEventId: string;
+  localEntityId: string;
+  source: "flynns_pos";
+  createdAt: string;
+  businessId: string;
+  locationId: string;
+  dryRun: boolean;
+  payloadVersion: 1;
+}
+
+export interface LoyaltySyncQueueEvent {
+  id: string;
+  event_type: LoyaltySyncEventType;
+  entity_type: LoyaltySyncEntityType;
+  entity_id: string;
+  payload_json: string;
+  status: LoyaltySyncStatus;
+  attempts: number;
+  last_error: string | null;
+  dry_run_result_json: string | null;
+  created_at: string;
+  updated_at: string;
+  synced_at: string | null;
+  next_retry_at: string | null;
+}
+
+export interface LoyaltySyncQueueInput {
+  event_type: LoyaltySyncEventType;
+  entity_type: LoyaltySyncEntityType;
+  entity_id: string;
+  payload: Record<string, unknown>;
+}
+
+export interface LoyaltySyncQueueStats {
+  pending: number;
+  processing: number;
+  synced: number;
+  failed: number;
+  skipped: number;
+  lastAttempt: string | null;
+  lastError: string | null;
+}
+
+export interface LoyaltyProviderStatus {
+  configured: boolean;
+  enabled: boolean;
+  status: "not_configured" | "configured_disabled" | "enabled" | "error";
+  message: string;
+}
+
+export interface LoyaltySyncResult {
+  ok: boolean;
+  status: "synced" | "dry_run" | "disabled" | "not_configured" | "error";
+  message: string;
+  mappedPath?: string;
+  payload?: Record<string, unknown>;
+}

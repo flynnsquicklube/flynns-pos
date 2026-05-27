@@ -42,8 +42,7 @@ export function PosTicketSummary({
       </div>
       <div className="mt-5 grid gap-3">
         <Button onClick={onSave}>Save Ticket</Button>
-        <Button variant={payEnabled ? "success" : "secondary"} disabled={!payEnabled}>{payEnabled ? "Pay" : "Pay Coming Soon"}</Button>
-        <Button variant="ghost">More Options</Button>
+        {payEnabled ? <Button variant="success">Pay</Button> : null}
       </div>
     </PosCard>
   );

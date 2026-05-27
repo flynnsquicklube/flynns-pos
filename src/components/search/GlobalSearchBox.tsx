@@ -1,4 +1,4 @@
-import { ScanLine, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { normalizeGlobalSearchQuery, shouldRunGlobalSearch } from "../../lib/domain/search/globalSearch";
 import { globalSearch, type GlobalSearchResults } from "../../lib/db/repositories/globalSearchRepo";
@@ -64,11 +64,11 @@ export function GlobalSearchBox({ onCustomer, onVehicle, onTicket, onStartCustom
   };
 
   return (
-    <div ref={rootRef} className="relative flex-1">
+    <div ref={rootRef} className="relative min-w-[180px] flex-1">
       <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--pos-muted)]" size={20} />
       <input
-        className="h-13 min-h-12 w-full rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel-2)] pl-12 pr-14 text-base text-[var(--pos-text)] outline-none transition placeholder:text-[var(--pos-muted-2)] focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-[var(--pos-blue-soft)]"
-        placeholder="Search customer, vehicle, phone, VIN, plate, or scan..."
+        className="h-13 min-h-12 w-full rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel-2)] pl-12 pr-4 text-base text-[var(--pos-text)] outline-none transition placeholder:text-[var(--pos-muted-2)] focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-[var(--pos-blue-soft)]"
+        placeholder="Search customers, vehicles, orders..."
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onFocus={() => {
@@ -82,9 +82,6 @@ export function GlobalSearchBox({ onCustomer, onVehicle, onTicket, onStartCustom
           }
         }}
       />
-      <button type="button" disabled className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-[var(--pos-muted)]" title="Scanner Coming Soon">
-        <ScanLine size={20} />
-      </button>
       {open ? (
         <GlobalSearchResultsView
           results={results}

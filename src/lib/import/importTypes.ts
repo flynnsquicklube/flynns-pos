@@ -1,4 +1,4 @@
-export type ImportType = "orders" | "inventory";
+export type ImportType = "orders" | "inventory" | "packages";
 export type ImportStatus = "previewed" | "running" | "completed" | "failed";
 
 export interface ParsedCsvRow {
@@ -60,6 +60,15 @@ export interface InventoryPreview {
   errors: ImportErrorInfo[];
 }
 
+export interface PackageImportPreview {
+  totalRows: number;
+  accessibleRows: number;
+  estimatedNewPackages: number;
+  estimatedUpdatedPackages: number;
+  rowsPreview: ParsedCsvRow[];
+  errors: ImportErrorInfo[];
+}
+
 export interface OrdersImportResult {
   batchId: string;
   rowsTotal: number;
@@ -82,5 +91,18 @@ export interface InventoryImportResult {
   failed: number;
   inventoryItemsCreated: number;
   inventoryItemsUpdated: number;
+  errors: ImportErrorInfo[];
+}
+
+export interface PackageImportResult {
+  batchId: string;
+  rowsTotal: number;
+  imported: number;
+  skipped: number;
+  failed: number;
+  packagesCreated: number;
+  packagesUpdated: number;
+  packagesAccessible: number;
+  duplicatesDeactivated: number;
   errors: ImportErrorInfo[];
 }

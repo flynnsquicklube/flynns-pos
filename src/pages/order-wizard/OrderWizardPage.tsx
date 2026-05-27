@@ -9,33 +9,45 @@ import { PackageWorkflowScreen } from "../../components/order-wizard/PackageWork
 import { PlateLookupStep } from "../../components/order-wizard/PlateLookupStep";
 import { ServicingStep } from "../../components/order-wizard/ServicingStep";
 import { SpecsStep } from "../../components/order-wizard/SpecsStep";
+import { StartTicketPopout } from "../../components/order-wizard/StartTicketPopout";
 import { VehicleMethodStep } from "../../components/order-wizard/VehicleMethodStep";
 import { VinLookupStep } from "../../components/order-wizard/VinLookupStep";
 import { emptyCustomerForm, useOrderWizardState } from "../../components/order-wizard/orderWizardState";
 import type { VehicleSpecsForm, WizardStep } from "../../components/order-wizard/orderWizardTypes";
+import { canNavigateToStep, getBlockedStepReason, hasVehicleStarted } from "../../components/order-wizard/wizardNavigation";
 import { listActiveCatalogItems } from "../../lib/db/repositories/catalogRepo";
-import { createCustomer, getCustomer, searchCustomers } from "../../lib/db/repositories/customersRepo";
+import { createCustomer, getCustomer, searchCustomersAdvanced } from "../../lib/db/repositories/customersRepo";
 import { listActivePackages } from "../../lib/db/repositories/packagesRepo";
 import { getSetting } from "../../lib/db/repositories/settingsRepo";
 import { createTicketWithItems, listActiveTickets, startService } from "../../lib/db/repositories/ticketsRepo";
 import { createWindowSticker, updateWindowStickerStatus } from "../../lib/db/repositories/windowStickersRepo";
-import { createVehicle, getVehicleById, searchVehicles, updateVehicle } from "../../lib/db/repositories/vehiclesRepo";
+import { createWindowStickerPrintJob, markPrintJobPreviewed, markPrintJobPrinted } from "../../lib/printing/printJobService";
+import { applyVehicleDecode, createVehicle, findVehicleByPlate, findVehicleByVin, findVehicleByVinOrPlate, getVehicleById, searchVehicles, updateVehicle } from "../../lib/db/repositories/vehiclesRepo";
 import { searchOilFilters } from "../../lib/db/repositories/inventoryRepo";
 import { buildWindowStickerData, type WindowStickerPrintData } from "../../lib/domain/stickers/windowStickerBuilder";
 import { getVehicleOilChangeDefaults } from "../../lib/domain/vehicles/vehicleServiceDefaults";
 import { buildOilChangePackageLines } from "../../lib/domain/packages/packageWorkflow";
+import { getPackageCategory } from "../../lib/domain/packages/packageCategories";
 import { suggestEngineOil, type OilSelectionSuggestion } from "../../lib/domain/services/oilSelection";
 import { calculatePackagePricing } from "../../lib/utils/pricing";
 import { consumeStartTicketContext } from "../../lib/domain/startTicket/startTicketContext";
+import { normalizeIdentifierDraft, validateCanLeaveCustomerStep, validateCanLeaveSpecsStep, validateCanSendToBay, validateStartTicketVehicleSpecs, validateVehicleIdentifier } from "../../lib/domain/startTicket/startTicketValidation";
+import { normalizePlate, normalizePlateState } from "../../lib/domain/vehicles/plateUtils";
+import { applyDecodedVehicleToDraft, decodeVinWithFallback, isVinDecodeEnabled } from "../../lib/integrations/vinDecoder/vinDecoder.service";
+import { lookupPlateLocalFirst } from "../../lib/integrations/plateLookup/plateLookup.service";
+import { extractVinFromScannedText } from "../../lib/domain/vehicles/vinUtils";
+import type { NormalizedVehicleDecode } from "../../lib/integrations/vinDecoder/vinDecoder.types";
 import type { ServiceCatalogItem } from "../../types/catalog";
 import type { PackageFilterType, ServicePackage } from "../../types/servicePackage";
 import type { TicketLineInput } from "../../types/ticket";
 import { useToast } from "../../components/ui/useToast";
 import { WindowStickerPreview } from "../../components/stickers/WindowStickerPreview";
+import { VehicleInfoLookupModal } from "../../components/vehicle-info/VehicleInfoLookupModal";
 import type { Customer } from "../../types/customer";
 import type { Vehicle } from "../../types/vehicle";
 import type { InventoryItem } from "../../types/inventory";
 import type { OilFilterSuggestion } from "../../lib/domain/services/oilFilterSuggestion";
+import type { VehicleInfoDefaultsInput } from "../../lib/db/repositories/vehicleInfoLookupRepo";
 
 interface OrderWizardPageProps {
   onCreated: (ticketId: string) => void;
@@ -48,14 +60,23 @@ function buildPackageLines(input: {
   selectedPackage: ServicePackage | null;
   actualQuarts: string;
   filterType: PackageFilterType;
+  selectedOilFilter?: OilFilterSuggestion | null;
+  filterChoice?: string | null;
   addOnLines: TicketLineInput[];
   taxRate: number;
 }): TicketLineInput[] {
-  const actualQuarts = Number(input.actualQuarts) || 0;
+  const isOilPackage = input.selectedPackage ? getPackageCategory(input.selectedPackage) === "Oil Changes" : false;
+  const oilFilterPrice = input.filterChoice === "customer_supplied" || input.filterChoice === "no_filter" || input.filterChoice === "standard_unmatched"
+    ? 0
+    : Math.max(Number(input.selectedOilFilter?.retailPrice) || 0, 0);
+  const actualQuarts = isOilPackage ? Number(input.actualQuarts) || 0 : 0;
   const packagePricing = calculatePackagePricing({
     selectedPackage: input.selectedPackage,
     actualQuarts,
     filterType: input.filterType,
+    oilFilterPrice,
+    oilFilterCost: input.selectedOilFilter?.cost,
+    oilFilterTaxable: 1,
     addons: input.addOnLines.map((line) => ({
       name: line.name,
       quantity: line.quantity,
@@ -75,10 +96,27 @@ function buildPackageLines(input: {
       inventory_item_id: null,
       name: input.selectedPackage.name,
       quantity: 1,
-      unit_price: input.selectedPackage.base_price,
+      unit_price: input.selectedPackage.package_total ?? input.selectedPackage.base_price,
       taxable: input.selectedPackage.taxable
     });
-    if (packagePricing.extraQuartTotal > 0) {
+    if (isOilPackage && oilFilterPrice > 0 && input.selectedOilFilter) {
+      const filterSku = input.selectedOilFilter.sku ?? input.selectedOilFilter.productId ?? "Oil Filter";
+      packageLines.push({
+        service_id: null,
+        item_type: "inventory",
+        package_id: input.selectedPackage.id,
+        inventory_item_id: input.selectedOilFilter.inventoryItemId ?? null,
+        cost: input.selectedOilFilter.cost ?? null,
+        sku: input.selectedOilFilter.sku ?? null,
+        product_id: input.selectedOilFilter.productId ?? null,
+        source_price_type: "inventory_retail",
+        name: `Engine Oil Filter - ${filterSku}`,
+        quantity: 1,
+        unit_price: oilFilterPrice,
+        taxable: 1
+      });
+    }
+    if (isOilPackage && packagePricing.extraQuartTotal > 0) {
       packageLines.push({
         service_id: null,
         item_type: "fee",
@@ -90,7 +128,7 @@ function buildPackageLines(input: {
         taxable: input.selectedPackage.taxable
       });
     }
-    if (packagePricing.filterFee > 0) {
+    if (isOilPackage && packagePricing.filterFee > 0) {
       packageLines.push({
         service_id: null,
         item_type: "fee",
@@ -126,6 +164,13 @@ function specsFromVehicle(vehicle: {
   year: number | null;
   make: string | null;
   model: string | null;
+  trim?: string | null;
+  sub_model?: string | null;
+  drive_type?: string | null;
+  fuel_type?: string | null;
+  engine_model?: string | null;
+  engine_displacement_l?: number | null;
+  transmission_style?: string | null;
   vin: string | null;
   plate: string | null;
   plate_state: string | null;
@@ -137,13 +182,30 @@ function specsFromVehicle(vehicle: {
     year: vehicle.year ? String(vehicle.year) : "",
     make: vehicle.make ?? "",
     model: vehicle.model ?? "",
-    engine: "",
+    trim: vehicle.trim ?? vehicle.sub_model ?? "",
+    engine: vehicle.engine_model ?? (vehicle.engine_displacement_l ? `${vehicle.engine_displacement_l}L` : ""),
+    drive_type: vehicle.drive_type ?? "",
+    fuel_type: vehicle.fuel_type ?? "",
+    transmission_style: vehicle.transmission_style ?? "",
     vin: vehicle.vin ?? "",
     plate: vehicle.plate ?? "",
     plate_state: vehicle.plate_state ?? "OH",
     mileage: vehicle.mileage ? String(vehicle.mileage) : "",
     oil_type: vehicle.oil_type ?? "",
     notes: vehicle.notes ?? ""
+  };
+}
+
+function mergeLookupContextIntoSpecs(current: VehicleSpecsForm, input: {
+  vin?: string | null;
+  plate?: string | null;
+  plate_state?: string | null;
+}) {
+  return {
+    ...current,
+    vin: input.vin?.trim().toUpperCase() || current.vin,
+    plate: input.plate?.trim().toUpperCase() || current.plate,
+    plate_state: input.plate_state?.trim().toUpperCase() || current.plate_state || "OH"
   };
 }
 
@@ -154,13 +216,37 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   const [saving, setSaving] = useState(false);
   const [bayModalOpen, setBayModalOpen] = useState(false);
   const [bayCounts, setBayCounts] = useState({ bay1: 0, bay2: 0 });
-  const [stickerPreview, setStickerPreview] = useState<{ stickerId: string; ticketId: string; data: WindowStickerPrintData } | null>(null);
+  const [stickerPreview, setStickerPreview] = useState<{ stickerId: string; ticketId: string; printJobId: string | null; data: WindowStickerPrintData } | null>(null);
   const [filterSearchOpen, setFilterSearchOpen] = useState(false);
   const [filterSearchQuery, setFilterSearchQuery] = useState("");
   const [filterSearchResults, setFilterSearchResults] = useState<InventoryItem[]>([]);
   const [filterSearchLoading, setFilterSearchLoading] = useState(false);
   const [workflowPackage, setWorkflowPackage] = useState<ServicePackage | null>(null);
+  const [vinDecodeEnabled, setVinDecodeEnabled] = useState(false);
+  const [vinDecodeMessage, setVinDecodeMessage] = useState<string | null>(null);
+  const [decodingVin, setDecodingVin] = useState(false);
+  const [lastVinDecode, setLastVinDecode] = useState<NormalizedVehicleDecode | null>(null);
+  const [vehicleInfoLookupOpen, setVehicleInfoLookupOpen] = useState(false);
+  const [plateLookupSearching, setPlateLookupSearching] = useState(false);
+  const [plateLookupSearched, setPlateLookupSearched] = useState(false);
   const { notify } = useToast();
+
+  const closeStartTicketPopout = () => {
+    if (!state.activePopout && onBackToStart) {
+      onBackToStart();
+      return;
+    }
+    setState((current) => {
+      if (current.step === "servicing" || current.step === "order") return { ...current, activePopout: null };
+      return {
+        ...current,
+        activePopout: null,
+        step: "vehicle",
+        vehicleSubstep: "method",
+        validation: null
+      };
+    });
+  };
 
   useEffect(() => {
     Promise.all([listActivePackages(), listActiveCatalogItems(), getSetting("tax_rate")])
@@ -173,9 +259,51 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   }, [setState]);
 
   useEffect(() => {
-    searchCustomers(state.customerSearch)
-      .then((matches) => setState((current) => ({ ...current, customerMatches: matches })))
-      .catch((error: unknown) => setState((current) => ({ ...current, validation: error instanceof Error ? error.message : "Unable to search customers." })));
+    isVinDecodeEnabled().then(setVinDecodeEnabled).catch(() => setVinDecodeEnabled(false));
+  }, []);
+
+  useEffect(() => {
+    const rawQuote = localStorage.getItem("flynns_quote_conversion");
+    if (!rawQuote) return;
+    try {
+      const parsed = JSON.parse(rawQuote) as { quoteNumber?: string; items?: Array<{ item_type?: string; package_id?: string | null; inventory_item_id?: string | null; name: string; quantity: number; unit_price: number; taxable: number }> };
+      const lines: TicketLineInput[] = (parsed.items ?? []).map((item) => ({
+        service_id: null,
+        item_type: item.item_type === "labor" ? "service" : item.item_type === "package" || item.item_type === "inventory" || item.item_type === "fee" || item.item_type === "discount" || item.item_type === "custom" ? item.item_type : "custom",
+        package_id: item.package_id ?? null,
+        inventory_item_id: item.inventory_item_id ?? null,
+        name: item.name,
+        quantity: Number(item.quantity) || 1,
+        unit_price: Number(item.unit_price) || 0,
+        taxable: item.taxable ?? 1
+      }));
+      if (!lines.length) return;
+      setState((current) => ({
+        ...current,
+        selectedCatalogItems: lines,
+        selectedLines: lines,
+        validation: `Quote ${parsed.quoteNumber ?? ""} loaded. Select customer, vehicle, and mileage before sending to bay.`
+      }));
+      notify({ tone: "success", title: "Quote loaded", message: "Quote items were added to this ticket draft." });
+    } catch {
+      notify({ tone: "error", title: "Quote conversion failed", message: "The saved quote payload could not be loaded." });
+    } finally {
+      localStorage.removeItem("flynns_quote_conversion");
+    }
+  }, [notify, setState]);
+
+  useEffect(() => {
+    const query = state.customerSearch.trim();
+    if (query.length < 2) {
+      setState((current) => current.customerMatches.length ? { ...current, customerMatches: [] } : current);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      searchCustomersAdvanced(query, {}, 25, 0)
+        .then((matches) => setState((current) => ({ ...current, customerMatches: matches })))
+        .catch((error: unknown) => setState((current) => ({ ...current, validation: error instanceof Error ? error.message : "Unable to search customers." })));
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [setState, state.customerSearch]);
 
   useEffect(() => {
@@ -278,6 +406,8 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
                   selectedPackage: current.selectedPackage,
                   actualQuarts: nextActualQuarts,
                   filterType: current.filterType,
+                  selectedOilFilter: current.selectedOilFilter ?? (defaults.oilFilter.source !== "none" ? defaults.oilFilter : null),
+                  filterChoice: current.filterChoice ?? (defaults.oilFilter.source !== "none" ? "inventory" : "standard_unmatched"),
                   addOnLines: current.selectedCatalogItems,
                   taxRate: current.taxRate
                 }),
@@ -288,8 +418,11 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             selectedOilFilterInventoryItemId: current.selectedOilFilterInventoryItemId ?? defaults.oilFilter.inventoryItemId ?? null,
             selectedOilFilterSku: current.selectedOilFilterSku ?? defaults.oilFilter.sku ?? defaults.oilFilter.productId ?? null,
             selectedOilFilterName: current.selectedOilFilterName ?? defaults.oilFilter.name ?? null,
+            selectedOilFilterBrand: current.selectedOilFilterBrand ?? defaults.oilFilter.brand ?? null,
+            selectedOilFilterRetailPrice: current.selectedOilFilterRetailPrice ?? defaults.oilFilter.retailPrice ?? null,
+            selectedOilFilterCost: current.selectedOilFilterCost ?? defaults.oilFilter.cost ?? null,
             selectedOilFilterSource: current.selectedOilFilterSource ?? (defaults.oilFilter.source !== "none" ? defaults.oilFilter.source : null),
-            filterChoice: current.filterChoice ?? (defaults.oilFilter.source !== "none" ? "suggested" : null),
+            filterChoice: current.filterChoice ?? (defaults.oilFilter.source !== "none" ? "inventory" : "standard_unmatched"),
             selectedOilInventoryItemId: current.selectedOilInventoryItemId ?? oilSuggestion.inventoryItemId ?? null,
             selectedOilSku: current.selectedOilSku ?? oilSuggestion.sku ?? null,
             selectedOilName: current.selectedOilName ?? oilSuggestion.name ?? null,
@@ -322,6 +455,20 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   }, [filterSearchOpen, filterSearchQuery, notify]);
 
   const goToStep = (step: WizardStep) => setState((current) => ({ ...current, step, validation: null }));
+  const handleStepClick = (step: WizardStep) => {
+    if (!canNavigateToStep(step, state)) {
+      const reason = getBlockedStepReason(step, state) ?? "Finish the required steps before continuing.";
+      setState((current) => ({ ...current, validation: reason }));
+      notify({ tone: "error", title: "Step blocked", message: reason });
+      return;
+    }
+    setState((current) => ({
+      ...current,
+      step,
+      customerFirstFlow: step === "customer" && !hasVehicleStarted(current) ? true : current.customerFirstFlow,
+      validation: null
+    }));
+  };
   const nextStep = () => {
     const currentIndex = stepOrder.indexOf(state.step);
     goToStep(stepOrder[Math.min(currentIndex + 1, stepOrder.length - 1)]);
@@ -333,14 +480,59 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
 
   const applyVehicleLookup = async (query: string, notFoundMessage: string) => {
     const normalizedQuery = query.trim();
-    if (state.vehicleMethod === "vin" && normalizedQuery && normalizedQuery.length !== 17) {
-      setState((current) => ({ ...current, validation: "VINs are usually 17 characters. You can still continue manually." }));
+    let match: Vehicle | null = null;
+    let nextSpecsPatch: Partial<VehicleSpecsForm> = {};
+
+    if (state.vehicleMethod === "vin") {
+      const extraction = extractVinFromScannedText(normalizedQuery);
+      if (!extraction.isValid || !extraction.candidate) {
+        const reason = extraction.reason ?? "VIN must be 17 characters and cannot contain I, O, or Q.";
+        setState((current) => ({ ...current, validation: reason }));
+        notify({ tone: "error", title: "VIN needed", message: reason });
+        return;
+      }
+      nextSpecsPatch = { vin: extraction.candidate };
+      match = await findVehicleByVin(extraction.candidate);
+    } else if (state.vehicleMethod === "plate") {
+      const plate = normalizePlate(state.plateInput);
+      const plateState = normalizePlateState(state.plateState);
+      const identifierValidation = validateVehicleIdentifier({ plate, plate_state: plateState });
+      if (!identifierValidation.valid) {
+        const reason = identifierValidation.reason ?? "Enter a license plate and state before searching.";
+        setState((current) => ({ ...current, validation: reason }));
+        notify({ tone: "error", title: "Plate needed", message: reason });
+        return;
+      }
+      setPlateLookupSearching(true);
+      setPlateLookupSearched(false);
+      nextSpecsPatch = { plate, plate_state: plateState };
+      try {
+        const result = await lookupPlateLocalFirst({ plate, state: plateState, country: "US", source: "start_ticket" });
+        match = result.status === "found" && result.raw ? result.raw as Vehicle : await findVehicleByPlate(plate, plateState);
+      } finally {
+        setPlateLookupSearching(false);
+        setPlateLookupSearched(true);
+      }
+    } else {
+      const matches = await searchVehicles(query);
+      match = matches[0] ?? null;
     }
-    const matches = await searchVehicles(query);
-    const match = matches[0] ?? null;
+
     if (!match) {
-      setState((current) => ({ ...current, validation: notFoundMessage, specs: { ...current.specs, vin: current.vinInput || current.specs.vin, plate: current.plateInput || current.specs.plate, plate_state: current.plateState } }));
-      goToStep("specs");
+      setState((current) => ({
+        ...current,
+        validation: notFoundMessage,
+        lookedUpVehicle: state.vehicleMethod === "plate" ? null : current.lookedUpVehicle,
+        selectedVehicleId: state.vehicleMethod === "plate" ? null : current.selectedVehicleId,
+        specs: mergeLookupContextIntoSpecs(current.specs, {
+          vin: nextSpecsPatch.vin ?? current.vinInput,
+          plate: nextSpecsPatch.plate ?? current.plateInput,
+          plate_state: nextSpecsPatch.plate_state ?? current.plateState
+        }),
+        step: state.vehicleMethod === "plate" ? "vehicle" : "specs",
+        activePopout: state.vehicleMethod === "plate" ? "plateLookup" : "manualVehicle",
+        vehicleSubstep: state.vehicleMethod === "plate" ? "plate" : current.vehicleSubstep
+      }));
       return;
     }
     const customer = match.customer_id ? await getCustomer(match.customer_id) : null;
@@ -351,40 +543,177 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       selectedCustomer: customer,
       selectedCustomerId: customer?.id ?? null,
       customerForm: customer ? emptyCustomerForm : current.customerForm,
-      specs: specsFromVehicle(match),
+      specs: { ...specsFromVehicle(match), mileage: "" },
       validation: null,
-      step: "specs"
+      step: state.vehicleMethod === "plate" ? "vehicle" : "specs",
+      activePopout: state.vehicleMethod === "plate" ? "plateLookup" : "manualVehicle",
+      vehicleSubstep: state.vehicleMethod === "plate" ? "plate" : current.vehicleSubstep
+    }));
+  };
+
+  const decodeVinIntoSpecs = async () => {
+    setDecodingVin(true);
+    setVinDecodeMessage(null);
+    try {
+      const result = await decodeVinWithFallback(state.vinInput, { modelYear: state.specs.year || null });
+      setVinDecodeMessage(result.message);
+      if (result.ok && result.data) {
+        const decoded = result.data;
+        setLastVinDecode(decoded);
+        setState((current) => ({
+          ...current,
+          vinInput: decoded.vin,
+          activePopout: "manualVehicle",
+          step: "specs",
+          specs: applyDecodedVehicleToDraft(decoded, current.specs),
+          validation: "VIN decoded. Confirm specs and mileage."
+        }));
+        notify({ tone: "success", title: "VIN decoded", message: [decoded.year, decoded.make, decoded.model].filter(Boolean).join(" ") || decoded.vin });
+      } else {
+        setLastVinDecode(null);
+        notify({ tone: result.status === "disabled" ? "info" : "error", title: result.status === "disabled" ? "VIN decoder disabled" : "VIN decode unavailable", message: result.message });
+      }
+    } finally {
+      setDecodingVin(false);
+    }
+  };
+
+  const handleScannedVin = async (vinInput: string) => {
+    const extraction = extractVinFromScannedText(vinInput);
+    if (!extraction.isValid || !extraction.candidate || extraction.candidate.length !== 17) {
+      setState((current) => ({ ...current, validation: extraction.reason ?? "No valid 17-character VIN was found." }));
+      notify({ tone: "error", title: "VIN scan rejected", message: extraction.reason ?? "No valid 17-character VIN was found." });
+      return;
+    }
+    const scannedVin = extraction.candidate;
+    setState((current) => ({ ...current, vinInput: scannedVin, specs: { ...current.specs, vin: scannedVin }, validation: "VIN scanned. Searching local vehicles..." }));
+    notify({ tone: "success", title: "VIN scanned", message: scannedVin });
+    const match = await findVehicleByVin(scannedVin);
+    if (match) {
+      const customer = match.customer_id ? await getCustomer(match.customer_id) : null;
+      setState((current) => ({
+        ...current,
+        vinInput: scannedVin,
+        lookedUpVehicle: match,
+        selectedVehicleId: match.id,
+        selectedCustomer: customer,
+        selectedCustomerId: customer?.id ?? null,
+          customerForm: customer ? emptyCustomerForm : current.customerForm,
+          specs: { ...specsFromVehicle(match), mileage: "" },
+          validation: null,
+          activePopout: "manualVehicle",
+          step: "specs"
+        }));
+      return;
+    }
+
+    setDecodingVin(true);
+    setVinDecodeMessage(null);
+    try {
+      const result = await decodeVinWithFallback(scannedVin, { modelYear: state.specs.year || null });
+      setVinDecodeMessage(result.message);
+      if (result.ok && result.data) {
+        const decoded = result.data;
+        setLastVinDecode(decoded);
+        setState((current) => ({
+          ...current,
+          vinInput: decoded.vin,
+          specs: applyDecodedVehicleToDraft(decoded, { ...current.specs, vin: decoded.vin }),
+          activePopout: "manualVehicle",
+          step: "specs",
+          validation: "VIN decoded. Confirm specs and mileage."
+        }));
+        notify({ tone: "success", title: "VIN decoded", message: [decoded.year, decoded.make, decoded.model].filter(Boolean).join(" ") || decoded.vin });
+      } else {
+        setLastVinDecode(null);
+        setState((current) => ({ ...current, vinInput: scannedVin, activePopout: "manualVehicle", specs: { ...current.specs, vin: scannedVin }, step: "specs", validation: "VIN decode unavailable. Confirm vehicle specs manually." }));
+        notify({ tone: result.status === "disabled" ? "info" : "error", title: result.status === "disabled" ? "VIN decoder disabled" : "VIN decode unavailable", message: result.message });
+      }
+    } finally {
+      setDecodingVin(false);
+    }
+  };
+
+  const useExistingPlateVehicle = (mileage: string) => {
+    if (!state.lookedUpVehicle) return;
+    const currentMileage = Number(mileage);
+    if (!Number.isFinite(currentMileage) || currentMileage <= 0) {
+      setState((current) => ({ ...current, validation: "Enter current mileage before using this vehicle." }));
+      notify({ tone: "error", title: "Mileage needed", message: "Enter current mileage before using this vehicle." });
+      return;
+    }
+    const specs = specsFromVehicle({ ...state.lookedUpVehicle, mileage: currentMileage });
+    setState((current) => ({
+      ...current,
+      specs,
+      vinInput: specs.vin || current.vinInput,
+      plateInput: specs.plate || current.plateInput,
+      plateState: specs.plate_state || current.plateState,
+      step: specs.year && specs.make && specs.model
+        ? (current.selectedCustomer || current.selectedCustomerId ? "servicing" : "customer")
+        : "specs",
+      activePopout: specs.year && specs.make && specs.model
+        ? (current.selectedCustomer || current.selectedCustomerId ? null : "customerSearch")
+        : "manualVehicle",
+      validation: current.selectedCustomer || current.selectedCustomerId ? null : "Existing vehicle has no linked customer. Select or add the customer before servicing."
+    }));
+  };
+
+  const continueWithNewPlateVehicle = () => {
+    const plate = normalizePlate(state.plateInput);
+    const plateState = normalizePlateState(state.plateState);
+    const identifierValidation = validateVehicleIdentifier({ plate, plate_state: plateState });
+    if (!identifierValidation.valid) {
+      const reason = identifierValidation.reason ?? "Enter a license plate and state before continuing.";
+      setState((current) => ({ ...current, validation: reason }));
+      notify({ tone: "error", title: "Plate needed", message: reason });
+      return;
+    }
+    setState((current) => ({
+      ...current,
+      lookedUpVehicle: null,
+      selectedVehicleId: null,
+      specs: mergeLookupContextIntoSpecs(current.specs, { plate, plate_state: plateState }),
+      step: "specs",
+      activePopout: "manualVehicle",
+      validation: "New vehicle. Confirm specs and mileage, then select or add the customer."
     }));
   };
 
   const validateSpecs = () => {
-    if (!state.specs.year || !state.specs.make.trim() || !state.specs.model.trim() || !state.specs.mileage) {
-      setState((current) => ({ ...current, validation: "Year, make, model, and mileage are required before continuing." }));
-      notify({ tone: "error", title: "Vehicle specs needed", message: "Enter year, make, model, and mileage." });
+    const specsValidation = validateCanLeaveSpecsStep(state);
+    if (!specsValidation.valid) {
+      const message = specsValidation.message ?? specsValidation.reason ?? "Finish vehicle specs before continuing.";
+      setState((current) => ({ ...current, validation: message }));
+      notify({ tone: "error", title: "Vehicle specs needed", message });
       return false;
+    }
+    const lastMileage = state.lookedUpVehicle?.mileage;
+    const currentMileage = Number(state.specs.mileage);
+    if (lastMileage && Number.isFinite(currentMileage) && currentMileage < lastMileage) {
+      const confirmed = window.confirm("Current mileage is lower than last recorded mileage. Continue?");
+      if (!confirmed) return false;
     }
     return true;
   };
 
   const validateCustomer = () => {
-    if (state.selectedCustomer) return true;
-    if (!state.customerForm.first_name.trim() || !state.customerForm.last_name.trim() || !state.customerForm.phone.trim()) {
-      setState((current) => ({ ...current, validation: "Select a customer or enter first name, last name, and phone." }));
-      notify({ tone: "error", title: "Customer needed", message: "Select a customer or enter first name, last name, and phone." });
+    const customerValidation = validateCanLeaveCustomerStep(state);
+    if (!customerValidation.valid) {
+      const message = customerValidation.message ?? "Select or add a customer before servicing.";
+      setState((current) => ({ ...current, validation: message }));
+      notify({ tone: "error", title: "Customer needed", message });
       return false;
     }
     return true;
   };
 
   const validateServices = () => {
-    if (state.selectedPackage && (!Number.isFinite(Number(state.actualQuarts)) || Number(state.actualQuarts) <= 0)) {
-      setState((current) => ({ ...current, validation: "Enter actual quarts before continuing." }));
-      notify({ tone: "error", title: "Quarts needed", message: "Actual quarts must be greater than zero." });
-      return false;
-    }
-    if (state.selectedLines.length === 0) {
-      setState((current) => ({ ...current, validation: "Add at least one service or custom item before continuing." }));
-      notify({ tone: "error", title: "Service needed", message: "Add at least one service or custom item." });
+    const serviceValidation = validateCanSendToBay(state);
+    if (!serviceValidation.valid) {
+      const message = serviceValidation.message ?? "Finish service selections before continuing.";
+      setState((current) => ({ ...current, validation: message }));
+      notify({ tone: "error", title: "Service needed", message });
       return false;
     }
     return true;
@@ -394,8 +723,15 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
     selectedPackage: ServicePackage | null;
     actualQuarts: string;
     filterType: PackageFilterType;
+    selectedOilFilter?: OilFilterSuggestion | null;
+    filterChoice?: string | null;
     addOnLines: TicketLineInput[];
-  }) => buildPackageLines({ ...next, taxRate: state.taxRate });
+  }) => buildPackageLines({
+    ...next,
+    selectedOilFilter: next.selectedOilFilter ?? state.selectedOilFilter,
+    filterChoice: next.filterChoice ?? state.filterChoice,
+    taxRate: state.taxRate
+  });
 
   const syncLines = (updates: Partial<Pick<typeof state, "selectedPackage" | "actualQuarts" | "filterType" | "selectedCatalogItems">>) => {
     setState((current) => {
@@ -493,6 +829,11 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       selectedPackage: state.selectedPackage,
       actualQuarts,
       filterType: state.filterType,
+      oilFilterPrice: state.filterChoice === "customer_supplied" || state.filterChoice === "no_filter" || state.filterChoice === "standard_unmatched"
+        ? 0
+        : Math.max(Number(state.selectedOilFilter?.retailPrice) || Number(state.selectedOilFilterRetailPrice) || 0, 0),
+      oilFilterCost: state.selectedOilFilter?.cost ?? state.selectedOilFilterCost ?? undefined,
+      oilFilterTaxable: 1,
       addons: [],
       taxRate: state.taxRate
     });
@@ -500,7 +841,7 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       package_id: state.selectedPackage.id,
       package_name: state.selectedPackage.name,
       oil_brand: state.selectedPackage.oil_brand,
-      oil_type: state.oilTypeOverride.trim() || state.specs.oil_type || state.selectedPackage.oil_type,
+      oil_type: state.selectedPackage.oil_type,
       included_quarts: state.selectedPackage.included_quarts,
       actual_quarts: actualQuarts,
       extra_quarts: pricing.extraQuarts,
@@ -516,13 +857,43 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       oil_sku: state.selectedOilSku,
       oil_name: state.selectedOilName ?? (state.oilTypeOverride.trim() || state.specs.oil_type || state.selectedPackage.oil_type),
       oil_source: state.selectedOilSource,
-      package_base_price: state.selectedPackage.base_price,
-      package_total: pricing.packageBase + pricing.extraQuartTotal + pricing.filterFee
+      package_base_price: state.selectedPackage.base_service_amount ?? state.selectedPackage.base_price,
+      package_total: pricing.packageBase + pricing.oilFilterTotal + pricing.extraQuartTotal + pricing.filterFee
     };
   };
 
   const persistOrder = async (): Promise<{ ticketId: string; customer: Customer; vehicle: Vehicle } | null> => {
-    if (!validateSpecs() || !validateCustomer() || !validateServices()) return null;
+    const workflowValidation = validateCanSendToBay(state);
+    if (!workflowValidation.valid) {
+      const message = workflowValidation.message ?? "Finish required ticket details before continuing.";
+      setState((current) => ({ ...current, validation: message }));
+      notify({ tone: "error", title: "Ticket not ready", message });
+      return null;
+    }
+    const normalizedIdentifier = normalizeIdentifierDraft(state.specs);
+    const duplicateBeforeCustomerSave = state.lookedUpVehicle
+      ? null
+      : await findVehicleByVinOrPlate({
+        vin: normalizedIdentifier.vin || null,
+        plate: normalizedIdentifier.plate || null,
+        state: normalizedIdentifier.plate ? normalizedIdentifier.plate_state : null
+      });
+    if (duplicateBeforeCustomerSave) {
+      const duplicateCustomer = duplicateBeforeCustomerSave.customer_id ? await getCustomer(duplicateBeforeCustomerSave.customer_id) : null;
+      setState((current) => ({
+        ...current,
+        lookedUpVehicle: duplicateBeforeCustomerSave,
+        selectedVehicleId: duplicateBeforeCustomerSave.id,
+        selectedCustomer: duplicateCustomer,
+        selectedCustomerId: duplicateCustomer?.id ?? null,
+        customerForm: duplicateCustomer ? emptyCustomerForm : current.customerForm,
+        specs: specsFromVehicle({ ...duplicateBeforeCustomerSave, mileage: Number(current.specs.mileage) || duplicateBeforeCustomerSave.mileage }),
+        validation: "Existing vehicle found. Review it and continue instead of creating a duplicate.",
+        step: "specs"
+      }));
+      notify({ tone: "error", title: "Existing vehicle found", message: "Use the existing vehicle match before creating the ticket." });
+      return null;
+    }
     const customer =
       state.selectedCustomer ??
       (await createCustomer({
@@ -538,18 +909,45 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
 
     const vehicleInput = {
       customer_id: customer.id,
-      vin: state.specs.vin.trim() || null,
-      plate: state.specs.plate.trim() || null,
-      plate_state: state.specs.plate_state.trim() || null,
+      vin: normalizedIdentifier.vin || null,
+      plate: normalizedIdentifier.plate || null,
+      plate_state: normalizedIdentifier.plate ? normalizedIdentifier.plate_state || null : null,
       year: Number(state.specs.year),
       make: state.specs.make.trim(),
       model: state.specs.model.trim(),
+      trim: state.specs.trim.trim() || null,
+      sub_model: state.specs.trim.trim() || null,
+      engine_model: state.specs.engine.trim() || null,
+      drive_type: state.specs.drive_type.trim() || null,
+      fuel_type: state.specs.fuel_type.trim() || null,
+      transmission_style: state.specs.transmission_style.trim() || null,
       mileage: Number(state.specs.mileage),
       oil_type: state.oilTypeOverride.trim() || state.specs.oil_type.trim() || null,
       notes: [state.specs.engine ? `Engine: ${state.specs.engine}` : "", state.specs.notes].filter(Boolean).join(" | ") || null
     };
+    const duplicate = state.lookedUpVehicle
+      ? null
+      : await findVehicleByVinOrPlate({ vin: vehicleInput.vin, plate: vehicleInput.plate, state: vehicleInput.plate_state });
+    if (duplicate) {
+      const duplicateCustomer = duplicate.customer_id ? await getCustomer(duplicate.customer_id) : null;
+      setState((current) => ({
+        ...current,
+        lookedUpVehicle: duplicate,
+        selectedVehicleId: duplicate.id,
+        selectedCustomer: duplicateCustomer ?? customer,
+        selectedCustomerId: duplicateCustomer?.id ?? customer.id,
+        specs: specsFromVehicle({ ...duplicate, mileage: vehicleInput.mileage }),
+        validation: "Existing vehicle found. Review it and continue instead of creating a duplicate.",
+        step: "specs"
+      }));
+      notify({ tone: "error", title: "Existing vehicle found", message: "Use the existing vehicle match before creating the ticket." });
+      return null;
+    }
     const vehicle = state.lookedUpVehicle ?? (await createVehicle(vehicleInput));
     if (state.lookedUpVehicle) await updateVehicle(state.lookedUpVehicle.id, vehicleInput);
+    if (lastVinDecode && vehicleInput.vin && lastVinDecode.vin === vehicleInput.vin.trim().toUpperCase()) {
+      await applyVehicleDecode(vehicle.id, lastVinDecode, false);
+    }
     if (!state.lookedUpVehicle) notify({ tone: "success", title: "Vehicle saved", message: [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") });
 
     const ticket = await createTicketWithItems({
@@ -566,7 +964,14 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   };
 
   const openBaySelection = async () => {
-    if (!validateSpecs() || !validateCustomer() || !validateServices()) return;
+    if (saving) return;
+    const workflowValidation = validateCanSendToBay(state);
+    if (!workflowValidation.valid) {
+      const message = workflowValidation.message ?? "Finish required ticket details before sending to bay.";
+      setState((current) => ({ ...current, validation: message }));
+      notify({ tone: "error", title: "Ticket not ready", message });
+      return;
+    }
     const activeTickets = await listActiveTickets();
     setBayCounts({
       bay1: activeTickets.filter((ticket) => ticket.status === "in_service" && ticket.bay === "Bay 1").length,
@@ -576,6 +981,7 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   };
 
   const startServiceFromWizard = async (bay: "Bay 1" | "Bay 2") => {
+    if (saving) return;
     setSaving(true);
     try {
       const result = await persistOrder();
@@ -603,8 +1009,9 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
         vehicle_id: result.vehicle.id,
         print_data_json: JSON.stringify(stickerData)
       });
+      const printJob = await createWindowStickerPrintJob(result.ticketId).catch(() => null);
       setBayModalOpen(false);
-      setStickerPreview({ stickerId: sticker.id, ticketId: result.ticketId, data: stickerData });
+      setStickerPreview({ stickerId: sticker.id, ticketId: result.ticketId, printJobId: printJob?.id ?? null, data: stickerData });
       notify({ tone: "success", title: `Service started in ${bay}`, message: "Window sticker queued." });
     } catch (error) {
       setState((current) => ({ ...current, validation: error instanceof Error ? error.message : "Unable to start service." }));
@@ -630,6 +1037,8 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       servicePackage: workflowPackage,
       actualQuarts: state.actualQuarts || String(workflowPackage.included_quarts),
       filterType: state.filterType,
+      selectedOilFilter: state.selectedOilFilter,
+      filterChoice: state.filterChoice,
       addOnLines: state.selectedCatalogItems,
       taxRate: state.taxRate
     });
@@ -645,6 +1054,14 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
   };
 
   const createOrder = async () => {
+    if (saving) return;
+    const workflowValidation = validateCanSendToBay(state);
+    if (!workflowValidation.valid) {
+      const message = workflowValidation.message ?? "Finish required ticket details before creating the order.";
+      setState((current) => ({ ...current, validation: message }));
+      notify({ tone: "error", title: "Ticket not ready", message });
+      return;
+    }
     setSaving(true);
     try {
       const result = await persistOrder();
@@ -659,9 +1076,45 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
     }
   };
 
+  const applyVehicleInfoDefaultsToWizard = async (defaults: VehicleInfoDefaultsInput) => {
+    const filterSku = defaults.oil_filter_sku?.trim();
+    let filterSuggestion: OilFilterSuggestion | null = null;
+    if (filterSku) {
+      const [matched] = await searchOilFilters(filterSku, 1).catch(() => []);
+      filterSuggestion = matched ? inventoryItemToOilFilterSuggestion(matched) : {
+        sku: filterSku,
+        name: `Oil Filter ${filterSku}`,
+        source: "manual",
+        confidence: "low",
+        message: "Saved from verified vehicle lookup. Match it to local inventory before checkout."
+      };
+    }
+    setState((current) => {
+      const nextActualQuarts = defaults.oil_capacity ? String(defaults.oil_capacity) : current.actualQuarts;
+      const nextOilType = defaults.oil_type ?? current.specs.oil_type;
+      return {
+        ...current,
+        actualQuarts: nextActualQuarts,
+        specs: { ...current.specs, oil_type: nextOilType },
+        oilTypeOverride: defaults.oil_type ?? current.oilTypeOverride,
+        selectedOilFilter: filterSuggestion ?? current.selectedOilFilter,
+        selectedOilFilterInventoryItemId: filterSuggestion?.inventoryItemId ?? current.selectedOilFilterInventoryItemId,
+        selectedOilFilterSku: filterSuggestion?.sku ?? filterSuggestion?.productId ?? current.selectedOilFilterSku,
+        selectedOilFilterName: filterSuggestion?.name ?? current.selectedOilFilterName,
+        selectedOilFilterBrand: filterSuggestion?.brand ?? current.selectedOilFilterBrand,
+        selectedOilFilterRetailPrice: filterSuggestion?.retailPrice ?? current.selectedOilFilterRetailPrice,
+        selectedOilFilterCost: filterSuggestion?.cost ?? current.selectedOilFilterCost,
+        selectedOilFilterSource: filterSuggestion?.source ?? current.selectedOilFilterSource,
+        filterChoice: filterSuggestion?.inventoryItemId ? "inventory" : current.filterChoice,
+        serviceDefaultsMessage: "Vehicle info lookup defaults applied. Verify before sending to bay.",
+        validation: null
+      };
+    });
+  };
+
   return (
     <>
-    <OrderWizardShell currentStep={state.step}>
+    <OrderWizardShell currentStep={state.step} state={state} onStepClick={handleStepClick}>
       {state.step === "servicing" && workflowPackage ? (
         <PackageWorkflowScreen
           servicePackage={workflowPackage}
@@ -677,7 +1130,42 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
           taxRate={state.taxRate}
           onBack={() => setWorkflowPackage(null)}
           onActualQuartsChange={(actualQuarts) => setState((current) => ({ ...current, actualQuarts }))}
-          onFilterTypeChange={(filterType) => setState((current) => ({ ...current, filterType }))}
+          onFilterTypeChange={(filterType) => setState((current) => {
+            if (filterType === "customer_supplied") {
+              return {
+                ...current,
+                filterType,
+                selectedOilFilter: null,
+                selectedOilFilterInventoryItemId: null,
+                selectedOilFilterSku: null,
+                selectedOilFilterName: "Customer supplied filter",
+                selectedOilFilterBrand: null,
+                selectedOilFilterRetailPrice: null,
+                selectedOilFilterCost: null,
+                selectedOilFilterSource: "customer_supplied",
+                filterChoice: "customer_supplied"
+              };
+            }
+            if (filterType === "none") {
+              return {
+                ...current,
+                filterType,
+                selectedOilFilter: null,
+                selectedOilFilterInventoryItemId: null,
+                selectedOilFilterSku: null,
+                selectedOilFilterName: "No filter",
+                selectedOilFilterBrand: null,
+                selectedOilFilterRetailPrice: null,
+                selectedOilFilterCost: null,
+                selectedOilFilterSource: "no_filter",
+                filterChoice: "no_filter"
+              };
+            }
+            if (current.filterChoice === "customer_supplied" || current.filterChoice === "no_filter") {
+              return { ...current, filterType, filterChoice: "standard_unmatched", selectedOilFilterSource: null };
+            }
+            return { ...current, filterType };
+          })}
           onOilTypeOverrideChange={(oilTypeOverride) => setState((current) => ({ ...current, oilTypeOverride, specs: { ...current.specs, oil_type: oilTypeOverride } }))}
           onUseFilter={(filter, choice) => setState((current) => ({
             ...current,
@@ -685,6 +1173,9 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             selectedOilFilterInventoryItemId: filter.inventoryItemId ?? null,
             selectedOilFilterSku: filter.sku ?? filter.productId ?? null,
             selectedOilFilterName: filter.name ?? null,
+            selectedOilFilterBrand: filter.brand ?? null,
+            selectedOilFilterRetailPrice: filter.retailPrice ?? null,
+            selectedOilFilterCost: filter.cost ?? null,
             selectedOilFilterSource: filter.source,
             filterChoice: choice
           }))}
@@ -694,6 +1185,9 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             selectedOilFilterInventoryItemId: null,
             selectedOilFilterSku: null,
             selectedOilFilterName: "Customer supplied filter",
+            selectedOilFilterBrand: null,
+            selectedOilFilterRetailPrice: null,
+            selectedOilFilterCost: null,
             selectedOilFilterSource: "customer_supplied",
             filterChoice: "customer_supplied",
             filterType: "customer_supplied"
@@ -704,6 +1198,9 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             selectedOilFilterInventoryItemId: null,
             selectedOilFilterSku: null,
             selectedOilFilterName: "No filter",
+            selectedOilFilterBrand: null,
+            selectedOilFilterRetailPrice: null,
+            selectedOilFilterCost: null,
             selectedOilFilterSource: "no_filter",
             filterChoice: "no_filter",
             filterType: "none"
@@ -722,107 +1219,195 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "method" ? (
         <VehicleMethodStep
-          onSelectVin={() => setState((current) => ({ ...current, vehicleMethod: "vin", vehicleSubstep: "vin", validation: null }))}
-          onSelectPlate={() => setState((current) => ({ ...current, vehicleMethod: "plate", vehicleSubstep: "plate", validation: null }))}
-          onSelectManual={() => goToStep("specs")}
+          onSelectCustomer={() => setState((current) => ({
+            ...current,
+            selectedStartingPoint: "customer",
+            activePopout: "customerSearch",
+            customerFirstFlow: true,
+            step: "customer",
+            validation: null
+          }))}
+          onSelectVin={() => setState((current) => ({ ...current, activePopout: "vinLookup", vehicleMethod: "vin", vehicleSubstep: "vin", validation: null }))}
+          onSelectPlate={() => {
+            setPlateLookupSearched(false);
+            setState((current) => ({ ...current, activePopout: "plateLookup", vehicleMethod: "plate", vehicleSubstep: "plate", validation: null }));
+          }}
+          onSelectManual={() => setState((current) => ({ ...current, selectedStartingPoint: "manual", activePopout: "manualVehicle", step: "specs", validation: null }))}
         />
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "vin" ? (
-        <VinLookupStep
-          vin={state.vinInput}
-          validation={state.validation}
-          onChange={(vinInput) => setState((current) => ({ ...current, vinInput, specs: { ...current.specs, vin: vinInput } }))}
-          onBack={() => setState((current) => ({ ...current, vehicleSubstep: "method", validation: null }))}
-          onSearch={() => void applyVehicleLookup(state.vinInput, "No local VIN match found. Continue with manual specs.")}
-          onContinue={() => setState((current) => ({ ...current, specs: { ...current.specs, vin: current.vinInput || current.specs.vin }, step: "specs", validation: null }))}
-        />
+        <StartTicketPopout title="VIN Lookup" subtitle="Scan, type, or decode a VIN while manual entry remains available." onClose={closeStartTicketPopout}>
+          <VinLookupStep
+            vin={state.vinInput}
+            validation={state.validation}
+            decodeEnabled={vinDecodeEnabled}
+            decodeResult={vinDecodeMessage}
+            decodedVehicle={lastVinDecode}
+            decoding={decodingVin}
+            onChange={(vinInput) => setState((current) => ({ ...current, vinInput, specs: { ...current.specs, vin: vinInput } }))}
+            onBack={closeStartTicketPopout}
+            onSearch={() => void applyVehicleLookup(state.vinInput, "No local VIN match found. Continue with manual specs.")}
+            onScannedVin={(vinInput) => void handleScannedVin(vinInput)}
+            onDecode={() => void decodeVinIntoSpecs()}
+            onUseDecoded={() => setState((current) => ({
+              ...current,
+              activePopout: "manualVehicle",
+              specs: lastVinDecode ? applyDecodedVehicleToDraft(lastVinDecode, current.specs) : current.specs,
+              step: "specs",
+              validation: lastVinDecode ? "Decoded specs applied. Confirm mileage before continuing." : null
+            }))}
+            onContinue={() => setState((current) => ({ ...current, activePopout: "manualVehicle", specs: { ...current.specs, vin: current.vinInput || current.specs.vin }, step: "specs", validation: null }))}
+          />
+        </StartTicketPopout>
       ) : null}
       {state.step === "vehicle" && state.vehicleSubstep === "plate" ? (
-        <PlateLookupStep
-          plate={state.plateInput}
-          plateState={state.plateState}
-          validation={state.validation}
-          onPlateChange={(plateInput) => setState((current) => ({ ...current, plateInput, specs: { ...current.specs, plate: plateInput } }))}
-          onStateChange={(plateState) => setState((current) => ({ ...current, plateState, specs: { ...current.specs, plate_state: plateState } }))}
-          onBack={() => setState((current) => ({ ...current, vehicleSubstep: "method", validation: null }))}
-          onSearch={() => void applyVehicleLookup(state.plateInput, "No local plate match found. Continue with manual specs.")}
-          onContinue={() => setState((current) => ({ ...current, specs: { ...current.specs, plate: current.plateInput || current.specs.plate, plate_state: current.plateState }, step: "specs", validation: null }))}
-        />
+        <StartTicketPopout title="License Plate Lookup" subtitle="Search local vehicles by plate and state." onClose={closeStartTicketPopout}>
+          <PlateLookupStep
+            plate={state.plateInput}
+            plateState={state.plateState}
+            validation={state.validation}
+            searching={plateLookupSearching}
+            searched={plateLookupSearched}
+            matchedVehicle={state.lookedUpVehicle}
+            matchedCustomer={state.selectedCustomer}
+            onPlateChange={(plateInput) => {
+              setPlateLookupSearched(false);
+              setState((current) => ({ ...current, plateInput: normalizePlate(plateInput), lookedUpVehicle: null, selectedVehicleId: null, specs: { ...current.specs, plate: normalizePlate(plateInput) } }));
+            }}
+            onStateChange={(plateState) => {
+              setPlateLookupSearched(false);
+              setState((current) => ({ ...current, plateState: normalizePlateState(plateState), lookedUpVehicle: null, selectedVehicleId: null, specs: { ...current.specs, plate_state: normalizePlateState(plateState) } }));
+            }}
+            onBack={closeStartTicketPopout}
+            onSearch={() => void applyVehicleLookup(state.plateInput, `No local vehicle found for ${normalizePlate(state.plateInput)} ${normalizePlateState(state.plateState)}.`)}
+            onUseExistingVehicle={useExistingPlateVehicle}
+            onContinue={continueWithNewPlateVehicle}
+          />
+        </StartTicketPopout>
       ) : null}
       {state.step === "specs" ? (
-        <SpecsStep
-          specs={state.specs}
-          validation={state.validation}
-          onChange={(specs) => setState((current) => ({ ...current, specs }))}
-          onPrevious={() => goToStep("vehicle")}
-          onNext={() => {
-            if (!validateSpecs()) return;
-            if (state.customerFirstFlow && state.selectedCustomer) {
-              goToStep("servicing");
-              return;
-            }
-            nextStep();
-          }}
-        />
+        <StartTicketPopout title={state.lookedUpVehicle ? "Confirm Vehicle Specs" : "Manual Vehicle Entry"} subtitle="Confirm the vehicle, identifier, and current mileage before service selection." onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+          <SpecsStep
+            specs={state.specs}
+            validation={state.validation}
+            decodedBy={lastVinDecode?.vin === state.specs.vin ? "NHTSA" : null}
+            matchedVehicle={state.lookedUpVehicle}
+            matchedCustomer={state.selectedCustomer}
+            onChange={(specs) => setState((current) => ({ ...current, specs }))}
+            onPrevious={closeStartTicketPopout}
+            onNext={() => {
+              if (!validateSpecs()) return;
+              if (state.selectedCustomer || state.selectedCustomerId) {
+                setState((current) => ({ ...current, activePopout: null, step: "servicing", validation: null }));
+                return;
+              }
+              setState((current) => ({
+                ...current,
+                activePopout: "customerSearch",
+                step: "customer",
+                validation: "New vehicle. Select or add the customer before continuing."
+              }));
+            }}
+            onLookupVehicleInfo={() => setVehicleInfoLookupOpen(true)}
+          />
+        </StartTicketPopout>
       ) : null}
       {state.step === "customer" && state.customerFirstFlow ? (
-        <CustomerSearchStep
-          selectedCustomer={state.selectedCustomer}
-          selectedVehicleId={state.selectedVehicleId}
-          validation={state.validation}
-          onBack={() => onBackToStart ? onBackToStart() : goToStep("vehicle")}
-          onSelectCustomer={(selectedCustomer) => setState((current) => ({
-            ...current,
-            selectedCustomer,
-            selectedCustomerId: selectedCustomer.id,
-            customerForm: emptyCustomerForm,
-            validation: null
-          }))}
-          onUseVehicle={(vehicle) => {
-            const specs = specsFromVehicle(vehicle);
-            const hasRequiredSpecs = Boolean(specs.year && specs.make && specs.model && specs.mileage);
-            setState((current) => ({
+        <StartTicketPopout title={state.selectedCustomer ? "Select Vehicle" : "Find Customer"} subtitle={state.selectedCustomer ? `Choose a vehicle for ${state.selectedCustomer.first_name} ${state.selectedCustomer.last_name}.` : "Search by name, phone, email, VIN, or plate."} onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+          <CustomerSearchStep
+            selectedCustomer={state.selectedCustomer}
+            selectedVehicleId={state.selectedVehicleId}
+            validation={state.validation}
+            onBack={closeStartTicketPopout}
+            onSelectCustomer={(selectedCustomer) => setState((current) => ({
               ...current,
-              lookedUpVehicle: vehicle,
-              selectedVehicleId: vehicle.id,
-              specs,
-              step: hasRequiredSpecs ? "servicing" : "specs",
-              validation: null
-            }));
-          }}
-          onAddVehicleForCustomer={() => {
-            if (!state.selectedCustomer) {
-              setState((current) => ({ ...current, validation: "Select or add a customer first." }));
-              return;
-            }
-            setState((current) => ({
-              ...current,
+              activePopout: "customerVehicles",
+              selectedCustomer,
+              selectedCustomerId: selectedCustomer.id,
               lookedUpVehicle: null,
               selectedVehicleId: null,
-              specs: { ...current.specs, vin: "", plate: "", mileage: "" },
-              step: "specs",
-              validation: "Customer selected. Add vehicle specs for this customer."
-            }));
-          }}
-        />
+              specs: { ...current.specs, mileage: "" },
+              customerForm: emptyCustomerForm,
+              validation: null
+            }))}
+            onUseVehicle={(vehicle) => {
+              const specs = specsFromVehicle(vehicle);
+              const specsValidation = validateStartTicketVehicleSpecs(specs);
+              setState((current) => ({
+                ...current,
+                activePopout: specsValidation.valid ? null : "manualVehicle",
+                lookedUpVehicle: vehicle,
+                selectedVehicleId: vehicle.id,
+                specs,
+                step: specsValidation.valid ? "servicing" : "specs",
+                validation: specsValidation.valid ? null : specsValidation.reason ?? "Confirm vehicle specs before servicing."
+              }));
+            }}
+            onAddVehicleForCustomer={() => {
+              if (!state.selectedCustomer) {
+                setState((current) => ({ ...current, validation: "Select or add a customer first." }));
+                return;
+              }
+              setState((current) => ({
+                ...current,
+                activePopout: "addVehicle",
+                lookedUpVehicle: null,
+                selectedVehicleId: null,
+                specs: { ...current.specs, vin: "", plate: "", mileage: "" },
+                step: "specs",
+                validation: "Customer selected. Add vehicle specs for this customer."
+              }));
+            }}
+          />
+        </StartTicketPopout>
       ) : null}
       {state.step === "customer" && !state.customerFirstFlow ? (
-        <CustomerFleetStep
-          search={state.customerSearch}
-          matches={state.customerMatches}
-          selectedCustomer={state.selectedCustomer}
-          form={state.customerForm}
-          fleetEnabled={state.fleetEnabled}
-          validation={state.validation}
-          onSearchChange={(customerSearch) => setState((current) => ({ ...current, customerSearch }))}
-          onSelectCustomer={(selectedCustomer) => setState((current) => ({ ...current, selectedCustomer, selectedCustomerId: selectedCustomer.id, validation: null }))}
-          onFormChange={(customerForm) => setState((current) => ({ ...current, customerForm }))}
-          onFleetChange={(fleetEnabled) => setState((current) => ({ ...current, fleetEnabled }))}
-          onPrevious={previousStep}
-          onNext={() => {
-            if (validateCustomer()) nextStep();
-          }}
-        />
+        <StartTicketPopout title="Select Customer" subtitle="Attach this vehicle to a customer before service selection." onClose={closeStartTicketPopout} closeOnBackdrop={false}>
+          <CustomerFleetStep
+            search={state.customerSearch}
+            matches={state.customerMatches}
+            selectedCustomer={state.selectedCustomer}
+            form={state.customerForm}
+            fleetEnabled={state.fleetEnabled}
+            validation={state.validation}
+            onSearchChange={(customerSearch) => setState((current) => ({ ...current, customerSearch }))}
+            onSelectCustomer={(selectedCustomer) => setState((current) => ({ ...current, selectedCustomer, selectedCustomerId: selectedCustomer.id, validation: null }))}
+            onFormChange={(customerForm) => setState((current) => ({ ...current, customerForm }))}
+            onFleetChange={(fleetEnabled) => setState((current) => ({ ...current, fleetEnabled }))}
+            onSaveCustomer={async () => {
+              const form = state.customerForm;
+              if (!form.first_name.trim() || !form.last_name.trim() || !form.phone.trim()) {
+                setState((current) => ({ ...current, validation: "First name, last name, and phone are required." }));
+                notify({ tone: "error", title: "Customer details needed", message: "First name, last name, and phone are required." });
+                return;
+              }
+              const customer = await createCustomer({
+                first_name: form.first_name.trim(),
+                last_name: form.last_name.trim(),
+                phone: form.phone.trim(),
+                email: form.email.trim() || null,
+                notes: form.notes.trim() || null,
+                firebase_uid: null,
+                referral_code: null
+              });
+              setState((current) => ({
+                ...current,
+                selectedCustomer: customer,
+                selectedCustomerId: customer.id,
+                customerForm: emptyCustomerForm,
+                customerSearch: "",
+                customerMatches: [],
+                validation: null
+              }));
+              notify({ tone: "success", title: "Customer saved", message: `${customer.first_name} ${customer.last_name} selected.` });
+            }}
+            onPrevious={() => setState((current) => ({ ...current, activePopout: "manualVehicle", step: "specs", validation: null }))}
+            onNext={() => {
+              if (!validateCustomer()) return;
+              setState((current) => ({ ...current, activePopout: null, step: "servicing", validation: null }));
+            }}
+          />
+        </StartTicketPopout>
       ) : null}
       {state.step === "servicing" && !workflowPackage ? (
         <ServicingStep
@@ -846,8 +1431,13 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
           internalNotes={state.internalNotes}
           pricing={calculatePackagePricing({
             selectedPackage: state.selectedPackage,
-            actualQuarts: Number(state.actualQuarts) || state.selectedPackage?.included_quarts || 0,
-            filterType: state.filterType,
+            actualQuarts: state.selectedPackage && getPackageCategory(state.selectedPackage) === "Oil Changes" ? Number(state.actualQuarts) || state.selectedPackage.included_quarts || 0 : 0,
+            filterType: state.selectedPackage && getPackageCategory(state.selectedPackage) === "Oil Changes" ? state.filterType : "none",
+            oilFilterPrice: !state.selectedPackage || getPackageCategory(state.selectedPackage) !== "Oil Changes" || state.filterChoice === "customer_supplied" || state.filterChoice === "no_filter" || state.filterChoice === "standard_unmatched"
+              ? 0
+              : Math.max(Number(state.selectedOilFilter?.retailPrice) || Number(state.selectedOilFilterRetailPrice) || 0, 0),
+            oilFilterCost: state.selectedOilFilter?.cost ?? state.selectedOilFilterCost ?? undefined,
+            oilFilterTaxable: 1,
             addons: state.selectedCatalogItems.map((line) => ({
               name: line.name,
               quantity: line.quantity,
@@ -860,17 +1450,96 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
           })}
           validation={state.validation}
           onSelectPackage={(selectedPackage) => {
-            setWorkflowPackage(selectedPackage);
+            const isOilPackage = getPackageCategory(selectedPackage) === "Oil Changes";
+            setWorkflowPackage(isOilPackage ? selectedPackage : null);
             setState((current) => ({
               ...current,
               selectedPackage: selectedPackage,
-              selectedLines: current.selectedCatalogItems,
-              actualQuarts: "",
+              selectedLines: isOilPackage
+                ? current.selectedCatalogItems
+                : buildPackageLines({
+                    selectedPackage,
+                    actualQuarts: "",
+                    filterType: current.filterType,
+                    selectedOilFilter: null,
+                    filterChoice: null,
+                    addOnLines: current.selectedCatalogItems,
+                    taxRate: current.taxRate
+                  }),
+              actualQuarts: isOilPackage ? "" : current.actualQuarts,
               validation: null
             }));
+            if (!isOilPackage) {
+              notify({ tone: "success", title: "Service added", message: `${selectedPackage.name} added to ticket.` });
+            }
           }}
           onActualQuartsChange={(actualQuarts) => syncLines({ actualQuarts })}
-          onFilterTypeChange={(filterType) => syncLines({ filterType })}
+          onFilterTypeChange={(filterType) => {
+            if (filterType === "customer_supplied") {
+              setState((current) => ({
+                ...current,
+                filterType,
+                selectedOilFilter: null,
+                selectedOilFilterInventoryItemId: null,
+                selectedOilFilterSku: null,
+                selectedOilFilterName: "Customer supplied filter",
+                selectedOilFilterBrand: null,
+                selectedOilFilterRetailPrice: null,
+                selectedOilFilterCost: null,
+                selectedOilFilterSource: "customer_supplied",
+                filterChoice: "customer_supplied",
+                selectedLines: rebuildPackageLines({
+                  selectedPackage: current.selectedPackage,
+                  actualQuarts: current.actualQuarts,
+                  filterType,
+                  selectedOilFilter: null,
+                  filterChoice: "customer_supplied",
+                  addOnLines: current.selectedCatalogItems
+                })
+              }));
+              return;
+            }
+            if (filterType === "none") {
+              setState((current) => ({
+                ...current,
+                filterType,
+                selectedOilFilter: null,
+                selectedOilFilterInventoryItemId: null,
+                selectedOilFilterSku: null,
+                selectedOilFilterName: "No filter",
+                selectedOilFilterBrand: null,
+                selectedOilFilterRetailPrice: null,
+                selectedOilFilterCost: null,
+                selectedOilFilterSource: "no_filter",
+                filterChoice: "no_filter",
+                selectedLines: rebuildPackageLines({
+                  selectedPackage: current.selectedPackage,
+                  actualQuarts: current.actualQuarts,
+                  filterType,
+                  selectedOilFilter: null,
+                  filterChoice: "no_filter",
+                  addOnLines: current.selectedCatalogItems
+                })
+              }));
+              return;
+            }
+            setState((current) => {
+              const nextFilterChoice = current.filterChoice === "customer_supplied" || current.filterChoice === "no_filter" ? "standard_unmatched" : current.filterChoice;
+              return {
+                ...current,
+                filterType,
+                filterChoice: nextFilterChoice,
+                selectedLines: rebuildPackageLines({
+                  selectedPackage: current.selectedPackage,
+                  actualQuarts: current.actualQuarts,
+                  filterType,
+                  selectedOilFilter: current.selectedOilFilter,
+                  filterChoice: nextFilterChoice,
+                  addOnLines: current.selectedCatalogItems
+                })
+              };
+            });
+          }}
           onOilTypeOverrideChange={(oilTypeOverride) => setState((current) => ({ ...current, oilTypeOverride, specs: { ...current.specs, oil_type: oilTypeOverride } }))}
           onUseSuggestedFilter={() => setState((current) => {
             const selected = current.oilFilterSuggestion?.source === "none" ? null : current.oilFilterSuggestion;
@@ -880,8 +1549,19 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
               selectedOilFilterInventoryItemId: selected?.inventoryItemId ?? null,
               selectedOilFilterSku: selected?.sku ?? selected?.productId ?? null,
               selectedOilFilterName: selected?.name ?? null,
+              selectedOilFilterBrand: selected?.brand ?? null,
+              selectedOilFilterRetailPrice: selected?.retailPrice ?? null,
+              selectedOilFilterCost: selected?.cost ?? null,
               selectedOilFilterSource: selected?.source ?? null,
-              filterChoice: selected ? "suggested" : null
+              filterChoice: selected ? "inventory" : "standard_unmatched",
+              selectedLines: rebuildPackageLines({
+                selectedPackage: current.selectedPackage,
+                actualQuarts: current.actualQuarts,
+                filterType: current.filterType,
+                selectedOilFilter: selected,
+                filterChoice: selected ? "inventory" : "standard_unmatched",
+                addOnLines: current.selectedCatalogItems
+              })
             };
           })}
           onOpenOilFilterSearch={() => {
@@ -894,9 +1574,20 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             selectedOilFilterInventoryItemId: null,
             selectedOilFilterSku: null,
             selectedOilFilterName: "Customer supplied filter",
+            selectedOilFilterBrand: null,
+            selectedOilFilterRetailPrice: null,
+            selectedOilFilterCost: null,
             selectedOilFilterSource: "customer_supplied",
             filterChoice: "customer_supplied",
-            filterType: "customer_supplied"
+            filterType: "customer_supplied",
+            selectedLines: rebuildPackageLines({
+              selectedPackage: current.selectedPackage,
+              actualQuarts: current.actualQuarts,
+              filterType: "customer_supplied",
+              selectedOilFilter: null,
+              filterChoice: "customer_supplied",
+              addOnLines: current.selectedCatalogItems
+            })
           }))}
           onNoFilter={() => setState((current) => ({
             ...current,
@@ -904,9 +1595,20 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             selectedOilFilterInventoryItemId: null,
             selectedOilFilterSku: null,
             selectedOilFilterName: "No filter",
+            selectedOilFilterBrand: null,
+            selectedOilFilterRetailPrice: null,
+            selectedOilFilterCost: null,
             selectedOilFilterSource: "no_filter",
             filterChoice: "no_filter",
-            filterType: "none"
+            filterType: "none",
+            selectedLines: rebuildPackageLines({
+              selectedPackage: current.selectedPackage,
+              actualQuarts: current.actualQuarts,
+              filterType: "none",
+              selectedOilFilter: null,
+              filterChoice: "no_filter",
+              addOnLines: current.selectedCatalogItems
+            })
           }))}
           onAddCatalogItem={addCatalogItem}
           onQuantityChange={(index, quantity) => setState((current) => {
@@ -955,6 +1657,7 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             if (validateServices()) nextStep();
           }}
           onStartService={openBaySelection}
+          onLookupVehicleInfo={() => setVehicleInfoLookupOpen(true)}
         />
       ) : null}
       {state.step === "order" ? (
@@ -970,7 +1673,6 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
           validation={state.validation}
           saving={saving}
           onPrevious={previousStep}
-          onSaveDraft={() => setState((current) => ({ ...current, validation: "Draft saving is reserved for a later step. Use Check In / Create Order to save locally now." }))}
           onCreateOrder={createOrder}
         />
       ) : null}
@@ -987,10 +1689,16 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
       <WindowStickerPreview
         stickerData={stickerPreview.data}
         onSkip={() => {
-          void updateWindowStickerStatus(stickerPreview.stickerId, "previewed").finally(() => onCreated(stickerPreview.ticketId));
+          void Promise.all([
+            updateWindowStickerStatus(stickerPreview.stickerId, "previewed"),
+            stickerPreview.printJobId ? markPrintJobPreviewed(stickerPreview.printJobId) : Promise.resolve()
+          ]).finally(() => onCreated(stickerPreview.ticketId));
         }}
         onMarkPrinted={() => {
-          void updateWindowStickerStatus(stickerPreview.stickerId, "printed").finally(() => onCreated(stickerPreview.ticketId));
+          void Promise.all([
+            updateWindowStickerStatus(stickerPreview.stickerId, "printed"),
+            stickerPreview.printJobId ? markPrintJobPrinted(stickerPreview.printJobId) : Promise.resolve()
+          ]).finally(() => onCreated(stickerPreview.ticketId));
         }}
       />
     ) : null}
@@ -1009,54 +1717,52 @@ export function OrderWizardPage({ onCreated, onBackToStart }: OrderWizardPagePro
             selectedOilFilterInventoryItemId: selected.inventoryItemId ?? null,
             selectedOilFilterSku: selected.sku ?? selected.productId ?? null,
             selectedOilFilterName: selected.name ?? null,
+            selectedOilFilterBrand: selected.brand ?? null,
+            selectedOilFilterRetailPrice: selected.retailPrice ?? null,
+            selectedOilFilterCost: selected.cost ?? null,
             selectedOilFilterSource: "manual",
-            filterChoice: "manual"
+            filterChoice: "inventory",
+            selectedLines: rebuildPackageLines({
+              selectedPackage: current.selectedPackage,
+              actualQuarts: current.actualQuarts,
+              filterType: current.filterType,
+              selectedOilFilter: selected,
+              filterChoice: "inventory",
+              addOnLines: current.selectedCatalogItems
+            })
           }));
           if (import.meta.env.DEV) {
             console.info("[oil-filter-selected]", { vehicleId: state.selectedVehicleId ?? state.lookedUpVehicle?.id ?? null, filterId: selected.inventoryItemId ?? null, sku: selected.sku ?? selected.productId ?? null });
           }
           setFilterSearchOpen(false);
         }}
-        onAddAsLine={(item) => {
-          const selected = inventoryItemToOilFilterSuggestion(item);
-          const line: TicketLineInput = {
-            service_id: null,
-            item_type: "inventory",
-            package_id: state.selectedPackage?.id ?? null,
-            inventory_item_id: item.id,
-            cost: item.cost,
-            sku: item.sku,
-            product_id: item.product_id,
-            source_price_type: "retail",
-            name: item.name,
-            quantity: 1,
-            unit_price: item.retail_price,
-            taxable: 1
-          };
-          setState((current) => {
-            const selectedCatalogItems = [...current.selectedCatalogItems, line];
-            return {
-              ...current,
-              selectedOilFilter: selected,
-              selectedOilFilterInventoryItemId: selected.inventoryItemId ?? null,
-              selectedOilFilterSku: selected.sku ?? selected.productId ?? null,
-              selectedOilFilterName: selected.name ?? null,
-              selectedOilFilterSource: "manual",
-              filterChoice: "manual",
-              selectedCatalogItems,
-              selectedLines: buildPackageLines({
-                selectedPackage: current.selectedPackage,
-                actualQuarts: current.actualQuarts,
-                filterType: current.filterType,
-                addOnLines: selectedCatalogItems,
-                taxRate: current.taxRate
-              })
-            };
-          });
-          setFilterSearchOpen(false);
-        }}
       />
     ) : null}
+    <VehicleInfoLookupModal
+      open={vehicleInfoLookupOpen}
+      context={{
+        vehicleId: state.selectedVehicleId ?? state.lookedUpVehicle?.id ?? null,
+        vehicle: state.lookedUpVehicle,
+        vin: state.specs.vin || state.vinInput || state.lookedUpVehicle?.vin,
+        year: state.specs.year || state.lookedUpVehicle?.year,
+        make: state.specs.make || state.lookedUpVehicle?.make,
+        model: state.specs.model || state.lookedUpVehicle?.model,
+        engine: state.specs.engine || state.lookedUpVehicle?.engine_model
+      }}
+      currentDefaults={{
+        oil_type: state.specs.oil_type || state.oilTypeOverride || null,
+        oil_capacity: Number(state.actualQuarts) || state.lookedUpVehicle?.oil_capacity || null,
+        oil_filter_sku: state.selectedOilFilterSku ?? state.lookedUpVehicle?.oil_filter_sku ?? null,
+        oil_filter_inventory_item_id: state.selectedOilFilterInventoryItemId ?? state.lookedUpVehicle?.oil_filter_inventory_item_id ?? null,
+        air_filter_sku: state.lookedUpVehicle?.air_filter_sku ?? null,
+        cabin_filter_sku: state.lookedUpVehicle?.cabin_filter_sku ?? null,
+        vehicle_info_notes: state.lookedUpVehicle?.vehicle_info_notes ?? null,
+        vehicle_info_source_url: state.lookedUpVehicle?.vehicle_info_source_url ?? null,
+        vehicle_info_source_title: state.lookedUpVehicle?.vehicle_info_source_title ?? null
+      }}
+      onClose={() => setVehicleInfoLookupOpen(false)}
+      onSaved={(defaults) => void applyVehicleInfoDefaultsToWizard(defaults)}
+    />
     </>
   );
 }

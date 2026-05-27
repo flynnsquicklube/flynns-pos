@@ -1,16 +1,16 @@
-import { Download, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
+import { PageHeader } from "../components/ui/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import {
   countCustomerSearchResults,
   createCustomer,
   getCustomerById,
   getCustomerStats,
-  listRecentCustomers,
   searchCustomersAdvanced,
   updateCustomer,
   type CustomerQuickFilter,
@@ -28,6 +28,11 @@ import type { TicketWithDetails } from "../types/ticket";
 import type { ServiceHistory } from "../types/serviceHistory";
 import { formatMoney } from "../lib/utils/money";
 import { setStartTicketContext } from "../lib/domain/startTicket/startTicketContext";
+import { createCustomerCoupon, listCouponsByCustomer } from "../lib/db/repositories/couponsRepo";
+import { listReferralRewardsByCustomer } from "../lib/db/repositories/referralsRepo";
+import { getPunchCardByVehicle, type VehiclePunchCard } from "../lib/db/repositories/punchCardsRepo";
+import type { CustomerCouponRecord } from "../lib/domain/loyalty/couponRules";
+import type { ReferralReward } from "../lib/domain/loyalty/referralRules";
 
 interface CustomersPageProps {
   initialCustomerId?: string;
@@ -47,6 +52,10 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [tickets, setTickets] = useState<TicketWithDetails[]>([]);
   const [history, setHistory] = useState<ServiceHistory[]>([]);
+  const [coupons, setCoupons] = useState<CustomerCouponRecord[]>([]);
+  const [referrals, setReferrals] = useState<ReferralReward[]>([]);
+  const [punchCards, setPunchCards] = useState<Array<{ vehicle: Vehicle; card: VehiclePunchCard | null }>>([]);
+  const [manualCoupon, setManualCoupon] = useState({ title: "$10 Manual Coupon", amount: "10" });
   const [newCustomer, setNewCustomer] = useState({ first_name: "", last_name: "", phone: "", email: "", notes: "" });
   const [editCustomer, setEditCustomer] = useState({ first_name: "", last_name: "", phone: "", email: "", notes: "" });
   const [newVehicle, setNewVehicle] = useState({ year: "", make: "", model: "", vin: "", plate: "", plate_state: "OH", mileage: "", oil_type: "" });
@@ -65,9 +74,17 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
     setLoading(true);
     const query = debouncedSearch.trim();
     const hasSearchOrFilter = Boolean(query || activeFilter);
+    if (!hasSearchOrFilter) {
+      setCustomers([]);
+      setResultCount(0);
+      setOffset(0);
+      if (!initialCustomerId) setSelected(null);
+      setLoading(false);
+      return;
+    }
     const filters = filtersFor(activeFilter);
-    const listPromise = hasSearchOrFilter ? searchCustomersAdvanced(query, filters, 50, nextOffset) : listRecentCustomers(10);
-    const countPromise = hasSearchOrFilter ? countCustomerSearchResults(query, filters) : Promise.resolve(10);
+    const listPromise = searchCustomersAdvanced(query, filters, 25, nextOffset);
+    const countPromise = countCustomerSearchResults(query, filters);
     Promise.all([listPromise, countPromise])
       .then(([rows, count]) => {
         setCustomers((current) => append ? [...current, ...rows] : rows);
@@ -76,7 +93,7 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Unable to load customers."))
       .finally(() => setLoading(false));
-  }, [activeFilter, debouncedSearch, filtersFor]);
+  }, [activeFilter, debouncedSearch, filtersFor, initialCustomerId]);
 
   const openCustomer = useCallback(async (customer: Customer) => {
     setSelected(customer);
@@ -87,14 +104,19 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
       email: customer.email ?? "",
       notes: customer.notes ?? ""
     });
-    const [customerVehicles, customerTickets, serviceHistory] = await Promise.all([
+    const [customerVehicles, customerTickets, serviceHistory, customerCoupons, customerReferrals] = await Promise.all([
       searchVehicles("", customer.id),
       listTicketsWithDetails({ includeCompletedTodayOnly: false }),
-      getServiceHistoryByCustomer(customer.id)
+      getServiceHistoryByCustomer(customer.id),
+      listCouponsByCustomer(customer.id),
+      listReferralRewardsByCustomer(customer.id)
     ]);
     setVehicles(customerVehicles);
     setTickets(customerTickets.filter((ticket) => ticket.customer_id === customer.id));
     setHistory(serviceHistory);
+    setCoupons(customerCoupons);
+    setReferrals(customerReferrals);
+    setPunchCards(await Promise.all(customerVehicles.map(async (vehicle) => ({ vehicle, card: await getPunchCardByVehicle(vehicle.id) }))));
   }, []);
 
   useEffect(() => {
@@ -163,6 +185,25 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
     loadCustomers();
   };
 
+  const addManualCoupon = async () => {
+    if (!selected) return;
+    const amount = Number(manualCoupon.amount);
+    if (!manualCoupon.title.trim() || !Number.isFinite(amount) || amount <= 0) {
+      notify({ tone: "error", title: "Coupon details needed", message: "Enter a title and discount amount." });
+      return;
+    }
+    await createCustomerCoupon({
+      customer_id: selected.id,
+      title: manualCoupon.title.trim(),
+      description: "Manual local POS coupon.",
+      discount_type: "fixed",
+      discount_amount: amount,
+      source: "manual"
+    });
+    notify({ tone: "success", title: "Coupon created", message: "Available on new and open tickets." });
+    await openCustomer(selected);
+  };
+
   const hasSearchOrFilter = Boolean(debouncedSearch.trim() || activeFilter);
   const filterButtons: { key: CustomerQuickFilter; label: string }[] = [
     { key: "recent", label: "Recent" },
@@ -174,12 +215,8 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
   return (
     <section className="space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-950">Customers & Fleets</h1>
-          <p className="text-sm text-slate-500">Search customers, vehicles, and fleet accounts.</p>
-        </div>
+        <PageHeader className="flex-1" title="Customers" subtitle="Search customer records, linked vehicles, and service history." />
         <div className="flex gap-2">
-          <Button variant="secondary" disabled icon={<Download size={16} />}>Export Coming Soon</Button>
           <Button size="touch" icon={<Plus size={16} />} onClick={() => setShowAdd((value) => !value)}>{showAdd ? "Close" : "Add Customer"}</Button>
         </div>
       </div>
@@ -195,11 +232,6 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
           <Button className="mt-4" onClick={saveCustomer}>Save Customer</Button>
         </Card>
       ) : null}
-      <div className="flex gap-6 border-b border-slate-200">
-        {["Customers", "Fleets"].map((tab, index) => (
-          <button key={tab} disabled={index !== 0} className={`py-3 text-sm font-semibold ${index === 0 ? "border-b-2 border-[var(--brand-primary)] text-[var(--brand-primary-dark)]" : "text-slate-400"}`}>{index === 0 ? tab : "Fleets Coming Soon"}</button>
-        ))}
-      </div>
       <Card className="p-5">
         <div className="relative">
           <Search className="absolute left-4 top-4 text-[var(--pos-muted)]" size={21} />
@@ -215,16 +247,32 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
       </Card>
       {!hasSearchOrFilter ? (
         <div className="grid gap-4 md:grid-cols-4">
-          <Card className="p-4"><div className="text-sm text-slate-500">Total Customers</div><div className="mt-2 text-3xl font-black text-slate-950">{stats.totalCustomers}</div></Card>
-          <Card className="p-4"><div className="text-sm text-slate-500">Imported</div><div className="mt-2 text-3xl font-black text-slate-950">{stats.importedCustomers}</div></Card>
-          <Card className="p-4"><div className="text-sm text-slate-500">With Vehicles</div><div className="mt-2 text-3xl font-black text-slate-950">{stats.customersWithVehicles}</div></Card>
-          <Card className="p-4"><div className="text-sm text-slate-500">Recent</div><div className="mt-2 text-3xl font-black text-slate-950">{stats.recentCustomers}</div></Card>
+          <Card className="p-4"><div className="text-sm text-[var(--pos-muted)]">Total Customers</div><div className="mt-2 text-3xl font-black text-[var(--pos-text)]">{stats.totalCustomers}</div></Card>
+          <Card className="p-4"><div className="text-sm text-[var(--pos-muted)]">Imported</div><div className="mt-2 text-3xl font-black text-[var(--pos-text)]">{stats.importedCustomers}</div></Card>
+          <Card className="p-4"><div className="text-sm text-[var(--pos-muted)]">With Vehicles</div><div className="mt-2 text-3xl font-black text-[var(--pos-text)]">{stats.customersWithVehicles}</div></Card>
+          <Card className="p-4"><div className="text-sm text-[var(--pos-muted)]">Recent</div><div className="mt-2 text-3xl font-black text-[var(--pos-text)]">{stats.recentCustomers}</div></Card>
         </div>
       ) : null}
+      {!hasSearchOrFilter ? (
+        <Card className="p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-card)] text-[var(--pos-blue-2)]">
+            <Search size={24} />
+          </div>
+          <h2 className="mt-4 text-xl font-black text-[var(--pos-text)]">Search to view customers</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-[var(--pos-muted)]">
+            Enter a name, phone number, email, VIN, or plate to find customer records.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <Badge tone="blue">Search by phone</Badge>
+            <Badge tone="blue">Search by plate</Badge>
+            <Badge tone="blue">Search by VIN</Badge>
+          </div>
+        </Card>
+      ) : null}
       {error ? <Card className="p-4 text-sm text-red-700">{error}</Card> : null}
-      <Card className="overflow-hidden">
+      {hasSearchOrFilter ? <Card className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3 text-sm text-slate-500">
-          <span>{hasSearchOrFilter ? `${resultCount} matching customer${resultCount === 1 ? "" : "s"}` : "Recent customers"}</span>
+          <span>{resultCount} matching customer{resultCount === 1 ? "" : "s"}</span>
           {loading ? <span>Searching...</span> : null}
         </div>
         {customers.length === 0 ? (
@@ -257,14 +305,13 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
             <Button variant="secondary" disabled={loading} onClick={() => loadCustomers(offset, true)}>Load More</Button>
           </div>
         ) : null}
-      </Card>
+      </Card> : null}
       {selected ? (
         <Card className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-bold text-slate-950">Customer Detail: {selected.first_name} {selected.last_name}</h2>
             <div className="flex gap-2">
               <Button onClick={() => { setStartTicketContext({ customerId: selected.id, source: "customer_detail" }); onStartTicket?.(); }}>Start Ticket</Button>
-              <Button variant="danger" disabled>Delete Coming Soon</Button>
             </div>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -276,6 +323,46 @@ export function CustomersPage({ initialCustomerId, onStartTicket }: CustomersPag
           </div>
           <Button className="mt-3" onClick={saveSelectedCustomer}>Save Customer</Button>
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            <div className="rounded-lg border border-slate-200 p-4">
+              <div className="font-bold text-slate-950">Customer App Link</div>
+              <div className="mt-3 space-y-2 text-sm text-slate-600">
+                <div>Status: <strong>{selected.app_link_status ?? (selected.firebase_uid ? "linked" : "unlinked")}</strong></div>
+                <div>Firebase UID: <strong>{selected.firebase_uid ?? "Not linked"}</strong></div>
+                <div>App email: <strong>{selected.app_email ?? selected.email ?? "-"}</strong></div>
+                <div>App phone: <strong>{selected.app_phone ?? selected.phone ?? "-"}</strong></div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-4">
+              <div className="font-bold text-slate-950">Coupons ({coupons.length})</div>
+              <div className="mt-3 space-y-2 text-sm">
+                {coupons.slice(0, 8).map((coupon) => (
+                  <div key={coupon.id} className="rounded-md border border-slate-100 p-2">
+                    <div className="font-semibold text-slate-950">{coupon.title} · {coupon.status}</div>
+                    <div className="text-slate-500">{coupon.discount_type === "fixed" ? formatMoney(coupon.discount_amount) : coupon.discount_type === "percent" ? `${coupon.discount_amount}%` : "Free oil change"} · {coupon.source ?? "manual"}</div>
+                  </div>
+                ))}
+                {!coupons.length ? <div className="text-slate-500">No coupons yet.</div> : null}
+              </div>
+              <div className="mt-4 grid gap-2">
+                <Input label="Manual coupon title" value={manualCoupon.title} onChange={(event) => setManualCoupon({ ...manualCoupon, title: event.target.value })} />
+                <Input label="Amount" type="number" value={manualCoupon.amount} onChange={(event) => setManualCoupon({ ...manualCoupon, amount: event.target.value })} />
+                <Button onClick={addManualCoupon}>Create Manual Coupon</Button>
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 p-4">
+              <div className="font-bold text-slate-950">Rewards</div>
+              <div className="mt-3 space-y-2 text-sm">
+                {punchCards.map(({ vehicle, card }) => (
+                  <div key={vehicle.id} className="rounded-md border border-slate-100 p-2">
+                    <div className="font-semibold text-slate-950">{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ") || "Vehicle"}</div>
+                    <div className="text-slate-500">{card?.punch_count ?? 0}/5 punches · {card?.free_rewards_available ?? 0} free rewards</div>
+                  </div>
+                ))}
+                {!punchCards.length ? <div className="text-slate-500">No vehicle punch cards yet.</div> : null}
+              </div>
+              <div className="mt-4 font-bold text-slate-950">Referrals ({referrals.length})</div>
+              <div className="mt-2 space-y-1 text-sm text-slate-500">{referrals.slice(0, 5).map((referral) => <div key={referral.id}>{referral.status} · {formatMoney(referral.reward_amount)}</div>)}</div>
+            </div>
             <div className="rounded-lg border border-slate-200 p-4">
               <div className="font-bold text-slate-950">Vehicles ({vehicles.length})</div>
               <div className="mt-3 space-y-2 text-sm">{vehicles.map((vehicle) => <div key={vehicle.id}>{[vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(" ")} · {vehicle.plate ?? vehicle.vin ?? "No ID"}</div>)}</div>

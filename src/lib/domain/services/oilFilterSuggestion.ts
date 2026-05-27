@@ -41,8 +41,15 @@ function extractFilterSku(text: string | null | undefined): string | null {
   if (!text) return null;
   const ofMatch = text.match(/\bOF[\s-]?[A-Z0-9]{2,8}\b/i);
   if (ofMatch) return ofMatch[0].replace(/\s+/g, "").toUpperCase();
+  const genericService = /engine oil filter\s*(r&r|remove|replace|remove & replace)|oil filter\s*(r&r|remove|replace|remove & replace)/i.test(text);
+  if (genericService && !/service champ|product|sku|part|inventory/i.test(text)) return null;
   const serviceChampMatch = text.match(/\b[A-Z]{1,4}\d{2,6}[A-Z]?\b/i);
   return serviceChampMatch?.[0]?.toUpperCase() ?? null;
+}
+
+function isGenericFilterServiceName(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return /^(engine\s+)?oil filter(\s+(r&r|remove\s*&?\s*replace|remove|replace))?$/i.test(text.trim());
 }
 
 export async function suggestOilFilter(vehicle: Vehicle | null): Promise<OilFilterSuggestion> {
@@ -100,7 +107,13 @@ export async function suggestOilFilter(vehicle: Vehicle | null): Promise<OilFilt
     if (item) return fromInventory(item, "last_service", "medium", "Matched last service filter to inventory.");
   }
   if (lastFilter?.name) {
-    return { name: lastFilter.name, sku: lastFilter.sku ?? undefined, source: "last_service", confidence: "low", message: "Last service mentioned an oil filter, but inventory could not be matched." };
+    return {
+      name: isGenericFilterServiceName(lastFilter.name) ? undefined : lastFilter.name,
+      sku: lastFilter.sku ?? undefined,
+      source: "last_service",
+      confidence: "low",
+      message: "Last service included an oil filter, but no product ID was found."
+    };
   }
 
   const lastItems = await getLastCompletedTicketItemsByVehicle(vehicle.id);
@@ -118,7 +131,12 @@ export async function suggestOilFilter(vehicle: Vehicle | null): Promise<OilFilt
       if (inventoryItem) return fromInventory(inventoryItem, "last_service", "medium", "Matched last ticket filter item to inventory.");
       return { sku: extractedSku, name: item.name, source: "last_service", confidence: "low", message: "Last ticket included a filter SKU, but inventory could not be matched." };
     }
-    return { name: item.name, source: "last_service", confidence: "low", message: "Last ticket included an oil filter, but no inventory item was matched." };
+    return {
+      name: isGenericFilterServiceName(item.name) ? undefined : item.name,
+      source: "last_service",
+      confidence: "low",
+      message: "Last ticket included an oil filter, but no product ID was found."
+    };
   }
 
   const fallbackItems = await searchOilFiltersForVehicle(vehicle);

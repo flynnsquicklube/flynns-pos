@@ -6,4 +6,8 @@ dist-electron/
 .env.local
 imports/
 *.csv
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+backups/
 .DS_Store

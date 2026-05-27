@@ -24,14 +24,14 @@ interface PackageWorkflowScreenProps {
   oilTypeOverride: string;
   selectedOilFilter: OilFilterSuggestion | null;
   oilFilterSuggestion: OilFilterSuggestion | null;
-  filterChoice: "suggested" | "manual" | "customer_supplied" | "no_filter" | null;
+  filterChoice: "inventory" | "suggested" | "manual" | "customer_supplied" | "no_filter" | "standard_unmatched" | null;
   selectedOil: OilSelectionSuggestion | null;
   taxRate: number;
   onBack: () => void;
   onActualQuartsChange: (value: string) => void;
   onFilterTypeChange: (value: PackageFilterType) => void;
   onOilTypeOverrideChange: (value: string) => void;
-  onUseFilter: (filter: OilFilterSuggestion, choice: "suggested" | "manual") => void;
+  onUseFilter: (filter: OilFilterSuggestion, choice: "inventory" | "suggested" | "manual") => void;
   onCustomerSuppliedFilter: () => void;
   onNoFilter: () => void;
   onSelectOil: (oil: OilSelectionSuggestion) => void;
@@ -60,14 +60,20 @@ export function PackageWorkflowScreen(props: PackageWorkflowScreenProps) {
   const [filterResults, setFilterResults] = useState<InventoryItem[]>([]);
   const [oilResults, setOilResults] = useState<InventoryItem[]>([]);
   const vehicleLabel = [props.specs.year, props.specs.make, props.specs.model].filter(Boolean).join(" ") || "Vehicle";
+  const oilFilterPrice = props.filterChoice === "customer_supplied" || props.filterChoice === "no_filter" || props.filterChoice === "standard_unmatched"
+    ? 0
+    : Math.max(Number(props.selectedOilFilter?.retailPrice) || 0, 0);
   const pricing = useMemo(() => calculatePackagePricing({
     selectedPackage: props.servicePackage,
     actualQuarts: Number(props.actualQuarts) || props.servicePackage.included_quarts,
     filterType: props.filterType,
+    oilFilterPrice,
+    oilFilterCost: props.selectedOilFilter?.cost,
+    oilFilterTaxable: 1,
     addons: [],
     taxRate: props.taxRate
-  }), [props.actualQuarts, props.filterType, props.servicePackage, props.taxRate]);
-  const selectedOilType = props.oilTypeOverride || props.specs.oil_type || props.servicePackage.oil_type || "";
+  }), [oilFilterPrice, props.actualQuarts, props.filterType, props.selectedOilFilter?.cost, props.servicePackage, props.taxRate]);
+const selectedOilType = props.oilTypeOverride || props.specs.oil_type || props.servicePackage.oil_type || "";
   const missing = getPackageWorkflowValidation({
     servicePackage: props.servicePackage,
     actualQuarts: props.actualQuarts || String(props.servicePackage.included_quarts),
@@ -78,7 +84,13 @@ export function PackageWorkflowScreen(props: PackageWorkflowScreenProps) {
     oilType: selectedOilType
   });
   const canAddPackage = missing.length === 0;
-  const displayedFilter = props.filterChoice === "customer_supplied" || props.filterChoice === "no_filter" ? null : props.selectedOilFilter ?? props.oilFilterSuggestion;
+  const suggestedFilter = props.oilFilterSuggestion?.source !== "none" ? props.oilFilterSuggestion : null;
+  const displayedFilter = props.filterChoice === "customer_supplied" || props.filterChoice === "no_filter" || props.filterChoice === "standard_unmatched" ? null : props.selectedOilFilter ?? suggestedFilter;
+  const filterOperationComplete = Boolean(
+    props.filterChoice === "customer_supplied" ||
+      props.filterChoice === "no_filter" ||
+      ((props.filterType === "standard" || props.filterType === "cartridge") && props.selectedOilFilter?.inventoryItemId)
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -95,11 +107,11 @@ export function PackageWorkflowScreen(props: PackageWorkflowScreenProps) {
   }, [oilQuery, selectedOilType]);
 
   return (
-    <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="min-w-0 space-y-5">
-        <div className="rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-5">
-          <Button variant="ghost" icon={<ArrowLeft size={17} />} onClick={props.onBack}>Back to Packages</Button>
-          <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+    <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-w-0 space-y-3">
+        <div className="rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4">
+          <Button size="sm" variant="ghost" icon={<ArrowLeft size={17} />} onClick={props.onBack}>Back to Packages</Button>
+          <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="text-sm font-black uppercase tracking-wide text-[var(--pos-blue-2)]">Viewing Package</div>
               <h1 className="mt-1 text-2xl font-black text-[var(--pos-text)]">{props.servicePackage.name}</h1>
@@ -111,55 +123,34 @@ export function PackageWorkflowScreen(props: PackageWorkflowScreenProps) {
           </div>
         </div>
 
-        <ServiceOperationPanel title="Engine Oil Filter Remove & Replace" complete={Boolean(props.filterChoice)}>
-          <div className="flex flex-wrap gap-2 text-xs font-black uppercase tracking-wide text-[var(--pos-muted)]">
-            <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1">Selected</span>
-            <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1">Previously Used On Vehicle</span>
-            <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1 opacity-60">Verified by Part Catalog Coming Soon</span>
-            <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1 opacity-60">All Catalog Parts Coming Soon</span>
-          </div>
-          <div className="mt-4 rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-black uppercase text-[var(--pos-muted)]">Suggested Filter</div>
-                <div className="mt-1 text-lg font-black text-[var(--pos-text)]">{displayedFilter?.sku ?? displayedFilter?.productId ?? (props.filterChoice === "customer_supplied" ? "Customer supplied" : props.filterChoice === "no_filter" ? "No filter" : "No saved filter found")}</div>
-                <div className="mt-1 text-sm text-[var(--pos-muted)]">{displayedFilter?.name ?? displayedFilter?.message ?? "Search local inventory below."}</div>
-                <div className="mt-1 text-sm text-[var(--pos-muted)]">{displayedFilter?.brand ?? "No vendor"} · Source {displayedFilter?.source ?? props.filterChoice ?? "none"} · {displayedFilter?.confidence ?? "none"}</div>
-              </div>
-              <div className="text-right">
-                <div className="font-black text-[var(--pos-text)]">{displayedFilter?.retailPrice !== undefined ? formatMoney(displayedFilter.retailPrice) : "Included"}</div>
-                <div className="text-sm text-[var(--pos-muted)]">{displayedFilter?.quantityOnHand !== undefined ? `${displayedFilter.quantityOnHand} on hand` : ""}</div>
+        <ServiceOperationPanel title="Step 1: Confirm Oil Type" complete={Boolean(selectedOilType || props.selectedOil)}>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,1fr)]">
+            <div>
+              <div className="text-sm font-black uppercase tracking-wide text-[var(--pos-muted)]">Selected package</div>
+              <div className="mt-1 text-xl font-black text-[var(--pos-text)]">{props.servicePackage.name}</div>
+              <div className="mt-2 rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-3 text-sm">
+                <div className="font-black text-[var(--pos-text)]">Recommended package oil</div>
+                <div className="mt-1 font-semibold text-[var(--pos-blue-2)]">
+                  {[props.servicePackage.oil_brand, props.servicePackage.oil_type].filter(Boolean).join(" · ") || "Oil change package"}
+                </div>
+                <div className="mt-1 text-[var(--pos-muted)]">
+                  Vehicle suggestion: {props.specs.oil_type || "No saved viscosity/type"}
+                </div>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {displayedFilter?.source !== "none" && displayedFilter ? <Button size="sm" onClick={() => props.onUseFilter(displayedFilter, displayedFilter.source === "manual" ? "manual" : "suggested")}>Use This Filter</Button> : null}
-              <Button size="sm" variant="secondary" onClick={props.onCustomerSuppliedFilter}>Customer Supplied</Button>
-              <Button size="sm" variant="ghost" onClick={props.onNoFilter}>No Filter</Button>
+            <div>
+              <Input label="Oil formulation / viscosity" inputSize="touch" value={props.oilTypeOverride} placeholder={props.servicePackage.oil_type ?? props.specs.oil_type ?? "Oil type"} onChange={(event) => props.onOilTypeOverrideChange(event.target.value)} helperText="Confirm the oil used for this service. Previous vehicle oil is a suggestion only." />
+              {props.selectedOil ? (
+                <div className="mt-3 rounded-xl border border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] p-3 text-sm">
+                  <div className="font-black text-[var(--pos-text)]">{props.selectedOil.name ?? props.selectedOil.sku ?? "Selected oil"}</div>
+                  <div className="mt-1 text-[var(--pos-muted)]">{props.selectedOil.brand ?? props.servicePackage.oil_brand ?? "No brand"} · {(props.selectedOil.viscosity ?? selectedOilType) || "No viscosity"} · Qty {props.selectedOil.quantityOnHand ?? "-"}</div>
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="relative mt-4">
             <Search className="absolute left-4 top-4 text-[var(--pos-muted)]" size={18} />
-            <Input inputSize="touch" className="pl-11" placeholder="Product ID / Type / Note" value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} />
-          </div>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {filterResults.map((item) => (
-              <button key={item.id} onClick={() => props.onUseFilter(filterFromInventory(item, "manual"), "manual")} className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4 text-left hover:border-[var(--pos-blue)]">
-                <div className="font-black text-[var(--pos-text)]">{item.product_id ?? item.sku ?? "No product ID"}</div>
-                <div className="mt-1 text-sm font-bold text-[var(--pos-text)]">{item.name}</div>
-                <div className="mt-1 text-sm text-[var(--pos-muted)]">{item.vendor ?? "No vendor"} · Qty {item.quantity_on_hand} · {formatMoney(item.retail_price)}</div>
-              </button>
-            ))}
-          </div>
-        </ServiceOperationPanel>
-
-        <ServiceOperationPanel title="Engine Oil Drain & Refill" complete={Boolean(selectedOilType || props.selectedOil)}>
-          <div className="grid gap-4 md:grid-cols-[180px_minmax(220px,1fr)]">
-            <Input label="Engine Oil System Capacity" inputSize="touch" type="number" min="0.1" step="0.1" value={props.actualQuarts} onChange={(event) => props.onActualQuartsChange(event.target.value)} helperText={`Included: ${props.servicePackage.included_quarts} QT`} />
-            <Input label="Oil formulation / viscosity" inputSize="touch" value={props.oilTypeOverride} placeholder={props.servicePackage.oil_type ?? "Oil type"} onChange={(event) => props.onOilTypeOverrideChange(event.target.value)} helperText="Suggested from vehicle, last service, or package default." />
-          </div>
-          <div className="relative mt-4">
-            <Search className="absolute left-4 top-4 text-[var(--pos-muted)]" size={18} />
-            <Input inputSize="touch" className="pl-11" placeholder="Search oil inventory, viscosity, formulation..." value={oilQuery} onChange={(event) => setOilQuery(event.target.value)} />
+            <Input inputSize="touch" className="pl-11" placeholder="Search engine oil inventory, viscosity, formulation..." value={oilQuery} onChange={(event) => setOilQuery(event.target.value)} />
           </div>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             {oilResults.map((item) => (
@@ -172,8 +163,105 @@ export function PackageWorkflowScreen(props: PackageWorkflowScreenProps) {
           </div>
         </ServiceOperationPanel>
 
-        <div className="flex justify-end">
-          <Button size="touch" disabled={!canAddPackage} onClick={props.onAddPackage}>Add Package</Button>
+        <ServiceOperationPanel title="Step 2: Confirm Oil Quantity" complete={Boolean(Number(props.actualQuarts) > 0)}>
+          <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+            <Input label="Actual quarts" inputSize="touch" type="number" min="0.1" step="0.1" value={props.actualQuarts} onChange={(event) => props.onActualQuartsChange(event.target.value)} helperText={`Included in package: ${props.servicePackage.included_quarts} QT`} />
+            <div className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4 text-sm">
+              <div className="font-black text-[var(--pos-text)]">Quantity math</div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <div><div className="text-[var(--pos-muted)]">Included</div><div className="font-black text-[var(--pos-text)]">{pricing.includedQuarts} QT</div></div>
+                <div><div className="text-[var(--pos-muted)]">Actual</div><div className="font-black text-[var(--pos-text)]">{pricing.actualQuarts} QT</div></div>
+                <div><div className="text-[var(--pos-muted)]">Extra charge</div><div className="font-black text-[var(--pos-text)]">{formatMoney(pricing.extraQuartTotal)}</div></div>
+              </div>
+            </div>
+          </div>
+        </ServiceOperationPanel>
+
+        <ServiceOperationPanel title="Step 3: Confirm Oil Filter" complete={filterOperationComplete}>
+          <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+            <label className="block text-sm font-semibold text-[var(--pos-text)]">
+              Filter type
+              <select
+                className="mt-2 h-12 w-full rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] px-3 text-base text-[var(--pos-text)] outline-none transition focus:border-[var(--pos-blue)] focus:ring-4 focus:ring-[var(--pos-blue-soft)]"
+                value={props.filterType}
+                onChange={(event) => props.onFilterTypeChange(event.target.value as PackageFilterType)}
+              >
+                <option value="standard">Standard filter</option>
+                <option value="cartridge">Cartridge filter</option>
+                <option value="customer_supplied">Customer supplied filter</option>
+                <option value="none">No filter</option>
+              </select>
+            </label>
+            <div className="flex flex-wrap content-start gap-2 text-xs font-black uppercase tracking-wide text-[var(--pos-muted)]">
+              <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1">Saved vehicle default</span>
+              <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1">Previous service history</span>
+              <span className="rounded-full bg-[var(--pos-panel-2)] px-3 py-1">Inventory match</span>
+            </div>
+          </div>
+          <div className="mt-4 rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-black uppercase text-[var(--pos-muted)]">Suggested Filter</div>
+                <div className="mt-1 text-lg font-black text-[var(--pos-text)]">{displayedFilter?.sku ?? displayedFilter?.productId ?? (props.filterChoice === "customer_supplied" ? "Customer supplied" : props.filterChoice === "no_filter" ? "No filter" : "No saved filter found for this vehicle.")}</div>
+                <div className="mt-1 text-sm text-[var(--pos-muted)]">{displayedFilter?.name ?? displayedFilter?.message ?? "Search local inventory or choose customer supplied/no filter."}</div>
+                <div className="mt-1 text-sm text-[var(--pos-muted)]">{displayedFilter?.brand ?? "No vendor"} · Source {displayedFilter?.source ?? props.filterChoice ?? "none"} · {displayedFilter?.confidence ?? "none"}</div>
+              </div>
+              <div className="text-right">
+                <div className="font-black text-[var(--pos-text)]">{displayedFilter?.retailPrice !== undefined ? formatMoney(displayedFilter.retailPrice) : "$0.00"}</div>
+                <div className="text-sm text-[var(--pos-muted)]">{displayedFilter?.quantityOnHand !== undefined ? `${displayedFilter.quantityOnHand} on hand` : "Retail line required unless supplied/no filter"}</div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {displayedFilter?.source !== "none" && displayedFilter ? <Button size="sm" onClick={() => props.onUseFilter(displayedFilter, "inventory")}>Use This Filter</Button> : null}
+              <Button size="sm" variant="secondary" onClick={props.onCustomerSuppliedFilter}>Customer Supplied</Button>
+              <Button size="sm" variant="ghost" onClick={props.onNoFilter}>No Filter</Button>
+            </div>
+          </div>
+          <div className="relative mt-4">
+            <Search className="absolute left-4 top-4 text-[var(--pos-muted)]" size={18} />
+            <Input inputSize="touch" className="pl-11" placeholder="Search oil filter by product ID, SKU, name, brand..." value={filterQuery} onChange={(event) => setFilterQuery(event.target.value)} />
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {filterResults.map((item) => (
+              <button key={item.id} onClick={() => props.onUseFilter(filterFromInventory(item, "manual"), "manual")} className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4 text-left hover:border-[var(--pos-blue)]">
+                <div className="font-black text-[var(--pos-text)]">{item.product_id ?? item.sku ?? "No product ID"}</div>
+                <div className="mt-1 text-sm font-bold text-[var(--pos-text)]">{item.name}</div>
+                <div className="mt-1 text-sm text-[var(--pos-muted)]">{item.vendor ?? "No vendor"} · Qty {item.quantity_on_hand} · {formatMoney(item.retail_price)}</div>
+              </button>
+            ))}
+          </div>
+        </ServiceOperationPanel>
+
+        <ServiceOperationPanel title="Step 4: Review / Add to Ticket" complete={canAddPackage}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4">
+              <div className="text-sm font-black uppercase tracking-wide text-[var(--pos-muted)]">Package</div>
+              <div className="mt-1 font-black text-[var(--pos-text)]">{props.servicePackage.name}</div>
+              <div className="mt-1 text-sm text-[var(--pos-muted)]">{[props.servicePackage.oil_brand, props.servicePackage.oil_type].filter(Boolean).join(" · ") || "Oil change package"}</div>
+            </div>
+            <div className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4">
+              <div className="text-sm font-black uppercase tracking-wide text-[var(--pos-muted)]">Oil / quarts</div>
+              <div className="mt-1 font-black text-[var(--pos-text)]">{props.selectedOil?.name ?? selectedOilType ?? "Oil not confirmed"}</div>
+              <div className="mt-1 text-sm text-[var(--pos-muted)]">{props.actualQuarts || props.servicePackage.included_quarts} QT · Extra {pricing.extraQuarts} QT</div>
+            </div>
+            <div className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-4">
+              <div className="text-sm font-black uppercase tracking-wide text-[var(--pos-muted)]">Filter</div>
+              <div className="mt-1 font-black text-[var(--pos-text)]">{props.filterChoice === "customer_supplied" ? "Customer supplied" : props.filterChoice === "no_filter" ? "No filter" : props.selectedOilFilter?.sku ?? props.selectedOilFilter?.productId ?? props.selectedOilFilter?.name ?? "Filter not selected"}</div>
+              <div className="mt-1 text-sm text-[var(--pos-muted)]">{props.selectedOilFilter?.name ?? props.filterChoice ?? "Choose filter option"}</div>
+            </div>
+            <div className="rounded-xl border border-[var(--pos-blue)] bg-[var(--pos-blue-soft)] p-4">
+              <div className="text-sm font-black uppercase tracking-wide text-[var(--pos-blue-2)]">Estimated total</div>
+              <div className="mt-1 text-3xl font-black text-[var(--pos-blue-2)]">{formatMoney(pricing.total)}</div>
+              <div className="mt-1 text-sm text-[var(--pos-muted)]">Package + filter + extra quarts + tax estimate</div>
+            </div>
+          </div>
+        </ServiceOperationPanel>
+
+        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--pos-border)] bg-[var(--pos-panel)] p-3">
+          <div className="text-sm font-semibold text-[var(--pos-muted)]">
+            {canAddPackage ? "Package is ready for the invoice. Next action: Send to Bay." : missing[0] ?? "Complete required operations."}
+          </div>
+          <Button size="touch" disabled={!canAddPackage} onClick={props.onAddPackage}>Add Package to Invoice</Button>
         </div>
       </div>
 

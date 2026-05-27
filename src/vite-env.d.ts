@@ -14,6 +14,38 @@ interface FlynnsPOSBridge {
   files?: {
     readText(filePath: string): Promise<string>;
   };
+  app?: {
+    getPaths(): Promise<{
+      appDataPath: string;
+      userDataPath: string;
+      databasePath: string | null;
+    }>;
+    openPath(path: string): Promise<{ ok: boolean; error?: string }>;
+    getPlatformInfo(): Promise<{
+      appVersion: string;
+      electronVersion: string;
+      nodeVersion: string;
+      platform: string;
+      arch: string;
+    }>;
+  };
+  backup?: {
+    createDatabaseBackup(input: { defaultFileName: string }): Promise<{
+      ok: boolean;
+      filePath?: string;
+      fileName?: string;
+      fileSizeBytes?: number;
+      databaseSizeBytes?: number;
+      error?: string;
+    }>;
+    saveDiagnosticsJson(input: { defaultFileName: string; payload: unknown }): Promise<{
+      ok: boolean;
+      filePath?: string;
+      fileName?: string;
+      fileSizeBytes?: number;
+      error?: string;
+    }>;
+  };
 }
 
 interface Window {

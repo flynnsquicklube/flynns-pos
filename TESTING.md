@@ -82,11 +82,10 @@
 3. Create a new ticket and confirm the new price applies.
 4. Confirm old/imported orders preserve original totals.
 
-## Integration Placeholders
+## Hidden Integrations
 
-1. Go to **Settings > Integrations**.
-2. Confirm VIN Decoder, Loyalty App Sync, Payments, Accounting, Messaging, and Plate Lookup show disabled/not configured states.
-3. Confirm setup buttons are disabled/Coming Soon.
+1. Confirm unsupported live integrations are not visible in the normal shop workflow.
+2. Confirm local manual payments, imports, printing preview, and database tools remain available.
 
 ## What Is Not Connected Yet
 
@@ -181,3 +180,105 @@ npm run electron:dev
 2. Confirm existing Droptop orders are counted as skipped.
 3. Import the same inventory CSV a second time.
 4. Confirm matching Product IDs update existing inventory records instead of creating duplicates.
+
+## White-Label / Reskin Checks
+
+### Business Profile
+
+1. Go to **Settings > Business Profile**.
+2. Temporarily change the business display name.
+3. Save the profile.
+4. Confirm the sidebar/app shell, invoice, receipt, and window sticker previews use the updated name where practical.
+5. Reset to Flynn's default.
+
+### Theme
+
+1. Go to **Settings > Theme/Branding**.
+2. Change the primary color.
+3. Save branding.
+4. Confirm primary buttons and nav highlights update while text remains readable.
+5. Reset to Flynn's default.
+
+### Terminology
+
+1. Go to **Settings > Theme/Branding**.
+2. Change **Ticket** to **Work Order**.
+3. Save branding.
+4. Confirm terminology updates where the UI has been wired to brand config.
+5. Reset to Flynn's default.
+
+### Export / Import
+
+1. Go to **Settings > Theme/Branding**.
+2. Click **Export Shop Config**.
+3. Confirm the JSON contains business profile, branding, packages, service catalog, loyalty rules, and print settings.
+4. Confirm the JSON does not contain customer, vehicle, order, payment, service-history, or CSV/import data.
+5. Paste the same JSON into **Import JSON** and import it.
+6. Confirm the app still loads Dashboard, Start Ticket, Inventory, Reports, Settings, invoices, receipts, and sticker previews.
+
+## Backup / Maintenance Checks
+
+### Backup
+
+1. Run the desktop app with `npm run electron:dev`.
+2. Go to **Settings > Database**.
+3. Click **Create Backup**.
+4. Choose a location outside the project folder.
+5. Confirm a `.sqlite` backup file is created.
+6. Confirm backup history shows the new backup.
+
+### Health Check
+
+1. Go to **Settings > Database**.
+2. Click **Run Database Check**.
+3. Confirm counts display for customers, vehicles, tickets, completed tickets, inventory, payments, coupons, and punch cards.
+4. Confirm warnings/errors render clearly and the page does not crash.
+
+### Diagnostics
+
+1. Go to **Settings > Database**.
+2. Click **Export Diagnostics**.
+3. Save the JSON file.
+4. Confirm it includes platform, health, import, backup, sync, audit summary, and local error summary sections.
+5. Confirm it does not include raw customer names, phone numbers, emails, VINs, full ticket details, payment details, or CSV contents.
+
+### App Data
+
+1. Go to **Settings > Database**.
+2. Click **Open App Data Folder**.
+3. Confirm the folder opens.
+4. Click **Copy Database Path** and paste it into a temporary note to confirm the path is copied.
+
+### Git Safety
+
+1. Run `git status`.
+2. Confirm no `imports/`, `.csv`, `.sqlite`, `.sqlite-wal`, `.sqlite-shm`, or `backups/` files are tracked or staged.
+
+## Vehicle Info Lookup Checks
+
+### Local History
+
+1. Open a vehicle with prior service history.
+2. Click **Lookup Vehicle Info**.
+3. Confirm the **Local History** tab shows prior oil type, actual quarts, oil filter, mileage, and source confidence when available.
+4. Click **Use Last Oil Capacity**, **Use Last Oil Type**, or **Use Last Oil Filter**.
+5. Save defaults.
+6. Start a new ticket for the same vehicle and confirm the oil package workflow uses the saved defaults as suggestions.
+
+### Manual Web Search
+
+1. Open a vehicle missing oil capacity or filter defaults.
+2. Click **Lookup Vehicle Info**.
+3. Open the **Web Search** tab.
+4. Confirm Google/Bing/DuckDuckGo links are generated and no search is run automatically.
+5. Open a search link in the browser.
+6. Manually enter a verified oil capacity, oil type, or filter SKU.
+7. Save defaults and confirm the current ticket wizard updates immediately.
+
+### Optional Google Provider
+
+1. Leave `VITE_GOOGLE_SEARCH_API_KEY` and `VITE_GOOGLE_SEARCH_CX` unset.
+2. Go to **Settings > Integrations**.
+3. Confirm Vehicle Info Lookup shows Google JSON search as disabled or not configured.
+4. Confirm manual links and local history still work.
+5. If a shop-owned key/CX are available, set them outside the repo, enable Google Vehicle Search, run one explicit search, and confirm suggestions require employee confirmation before saving.

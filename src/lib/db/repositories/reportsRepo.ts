@@ -45,6 +45,33 @@ export interface OrderStatusSummary {
   active: number;
 }
 
+export interface OutstandingBalanceSummary {
+  unpaidTickets: number;
+  partiallyPaidTickets: number;
+  paidTickets: number;
+  waitingPaymentAmount: number;
+}
+
+export interface CogsSummary {
+  estimatedCogs: number;
+  estimatedGrossProfit: number;
+  estimatedGrossMarginPercent: number;
+  inventoryBackedSales: number;
+  filterSales: number;
+  packageSales: number;
+  addOnSales: number;
+}
+
+export interface LoyaltyReportSummary {
+  couponsRedeemedCount: number;
+  couponsRedeemedAmount: number;
+  freeOilChangesRedeemed: number;
+  referralCouponsIssued: number;
+  activeCouponsCount: number;
+  estimatedActiveCouponValue: number;
+  freeOilChangeRewardsAvailable: number;
+}
+
 function dateClause(column: string, range: { dateFrom?: string; dateTo?: string }, params: unknown[]) {
   const clauses: string[] = [];
   if (range.dateFrom) {
@@ -85,7 +112,7 @@ export async function getSalesSummary(range: { dateFrom?: string; dateTo?: strin
 
 export async function getPaymentMethodTotals(range: { dateFrom?: string; dateTo?: string } = {}): Promise<PaymentMethodTotal[]> {
   const params: unknown[] = [];
-  const clauses = ["deleted_at IS NULL", ...dateClause("paid_at", range, params)];
+  const clauses = ["deleted_at IS NULL", "status = 'paid'", ...dateClause("paid_at", range, params)];
   return query<PaymentMethodTotal>(
     `SELECT method, COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count
      FROM payments
@@ -94,6 +121,22 @@ export async function getPaymentMethodTotals(range: { dateFrom?: string; dateTo?
      ORDER BY total DESC`,
     params
   );
+}
+
+export async function getOutstandingBalances(range: { dateFrom?: string; dateTo?: string } = {}): Promise<OutstandingBalanceSummary> {
+  const params: unknown[] = [];
+  const clauses = ["deleted_at IS NULL", ...dateClause("COALESCE(completed_at, created_at)", range, params)];
+  const [row] = await query<OutstandingBalanceSummary>(
+    `SELECT
+      COALESCE(SUM(CASE WHEN payment_status = 'unpaid' THEN 1 ELSE 0 END), 0) AS unpaidTickets,
+      COALESCE(SUM(CASE WHEN payment_status IN ('partial', 'partially_paid') THEN 1 ELSE 0 END), 0) AS partiallyPaidTickets,
+      COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END), 0) AS paidTickets,
+      COALESCE(SUM(CASE WHEN status = 'waiting_payment' THEN total ELSE 0 END), 0) AS waitingPaymentAmount
+     FROM tickets
+     WHERE ${clauses.join(" AND ")}`,
+    params
+  );
+  return row ?? { unpaidTickets: 0, partiallyPaidTickets: 0, paidTickets: 0, waitingPaymentAmount: 0 };
 }
 
 export async function getCarCount(range: { dateFrom?: string; dateTo?: string } = {}): Promise<number> {
@@ -166,6 +209,61 @@ export async function getOrderStatusSummary(range: { dateFrom?: string; dateTo?:
     completed: row?.completed ?? 0,
     canceled: row?.canceled ?? 0,
     active: row?.active ?? 0
+  };
+}
+
+export async function getCogsSummary(range: { dateFrom?: string; dateTo?: string } = {}): Promise<CogsSummary> {
+  const params: unknown[] = [];
+  const clauses = ["t.deleted_at IS NULL", "t.status = 'completed'", "i.deleted_at IS NULL", ...dateClause("t.completed_at", range, params)];
+  const [row] = await query<CogsSummary>(
+    `SELECT
+      COALESCE(SUM(CASE WHEN i.cost IS NOT NULL THEN i.cost * i.quantity ELSE 0 END), 0) AS estimatedCogs,
+      COALESCE(SUM(i.line_total), 0) - COALESCE(SUM(CASE WHEN i.cost IS NOT NULL THEN i.cost * i.quantity ELSE 0 END), 0) AS estimatedGrossProfit,
+      CASE
+        WHEN COALESCE(SUM(i.line_total), 0) > 0
+        THEN ((COALESCE(SUM(i.line_total), 0) - COALESCE(SUM(CASE WHEN i.cost IS NOT NULL THEN i.cost * i.quantity ELSE 0 END), 0)) / COALESCE(SUM(i.line_total), 0)) * 100
+        ELSE 0
+      END AS estimatedGrossMarginPercent,
+      COALESCE(SUM(CASE WHEN i.inventory_item_id IS NOT NULL THEN i.line_total ELSE 0 END), 0) AS inventoryBackedSales,
+      COALESCE(SUM(CASE WHEN i.inventory_item_id IS NOT NULL AND LOWER(i.name) LIKE '%filter%' THEN i.line_total ELSE 0 END), 0) AS filterSales,
+      COALESCE(SUM(CASE WHEN i.item_type = 'package' THEN i.line_total ELSE 0 END), 0) AS packageSales,
+      COALESCE(SUM(CASE WHEN COALESCE(i.item_type, 'service') NOT IN ('package', 'fee', 'discount') THEN i.line_total ELSE 0 END), 0) AS addOnSales
+     FROM ticket_items i
+     JOIN tickets t ON t.id = i.ticket_id
+     WHERE ${clauses.join(" AND ")}`,
+    params
+  );
+  return row ?? { estimatedCogs: 0, estimatedGrossProfit: 0, estimatedGrossMarginPercent: 0, inventoryBackedSales: 0, filterSales: 0, packageSales: 0, addOnSales: 0 };
+}
+
+export async function getLoyaltyReportSummary(range: { dateFrom?: string; dateTo?: string } = {}): Promise<LoyaltyReportSummary> {
+  const redeemedParams: unknown[] = [];
+  const redeemedClauses = ["status = 'redeemed'", ...dateClause("redeemed_at", range, redeemedParams)];
+  const [redeemed] = await query<Pick<LoyaltyReportSummary, "couponsRedeemedCount" | "couponsRedeemedAmount" | "freeOilChangesRedeemed">>(
+    `SELECT
+      COUNT(*) AS couponsRedeemedCount,
+      COALESCE(SUM(calculated_discount), 0) AS couponsRedeemedAmount,
+      COALESCE(SUM(CASE WHEN discount_type = 'free_oil_change' THEN 1 ELSE 0 END), 0) AS freeOilChangesRedeemed
+     FROM ticket_coupon_applications
+     WHERE ${redeemedClauses.join(" AND ")}`,
+    redeemedParams
+  );
+  const [active] = await query<Pick<LoyaltyReportSummary, "activeCouponsCount" | "estimatedActiveCouponValue">>(
+    `SELECT COUNT(*) AS activeCouponsCount,
+      COALESCE(SUM(CASE WHEN discount_type = 'fixed' THEN discount_amount ELSE 0 END), 0) AS estimatedActiveCouponValue
+     FROM customer_coupons
+     WHERE status = 'active'`
+  );
+  const [referrals] = await query<{ referralCouponsIssued: number }>("SELECT COUNT(*) AS referralCouponsIssued FROM customer_coupons WHERE source = 'referral'");
+  const [rewards] = await query<{ freeOilChangeRewardsAvailable: number }>("SELECT COALESCE(SUM(free_rewards_available), 0) AS freeOilChangeRewardsAvailable FROM vehicle_punch_cards");
+  return {
+    couponsRedeemedCount: redeemed?.couponsRedeemedCount ?? 0,
+    couponsRedeemedAmount: redeemed?.couponsRedeemedAmount ?? 0,
+    freeOilChangesRedeemed: redeemed?.freeOilChangesRedeemed ?? 0,
+    referralCouponsIssued: referrals?.referralCouponsIssued ?? 0,
+    activeCouponsCount: active?.activeCouponsCount ?? 0,
+    estimatedActiveCouponValue: active?.estimatedActiveCouponValue ?? 0,
+    freeOilChangeRewardsAvailable: rewards?.freeOilChangeRewardsAvailable ?? 0
   };
 }
 

@@ -35,6 +35,8 @@ npm run build
 npm run electron:build
 ```
 
+Installer signing and notarization are not wired yet. `electron-builder` is configured for local package builds, and code signing can be added when the deployment target is ready.
+
 ## macOS Setup
 
 1. Install Node.js 20 or newer.
@@ -89,6 +91,29 @@ Conceptually:
 - Windows: the user's AppData area for this app
 
 The app does not hardcode user paths. The database file is named `flynns-pos.sqlite`.
+
+## Backup And Diagnostics
+
+Open **Settings → Database** in the Electron desktop app to see the SQLite database path, app data folder, app/runtime versions, backup history, health check results, and recent local errors.
+
+Safe maintenance actions:
+
+- **Create Backup** copies the current SQLite database to a user-selected `.sqlite` file and records the backup in local history.
+- **Export Diagnostics** saves a JSON support bundle with app/platform info, schema/data health summary, import summaries, backup history, sync status, and local error summaries.
+- **Open App Data Folder** opens the local Electron `userData` folder.
+- **Copy Database Path** copies the local SQLite path for support.
+
+Diagnostics intentionally avoid raw customer names, phone numbers, emails, VINs, full order details, payment details, CSV imports, secrets, and `.env` data.
+
+Restore is intentionally disabled for now. A safe restore flow must create an emergency backup, replace the active database only when SQLite is closed, rerun migrations, and restart the app.
+
+Do not commit local data or backups. Git ignores:
+
+- `imports/`
+- `*.csv`
+- `.env` and `.env.local`
+- `*.sqlite`, `*.sqlite-wal`, `*.sqlite-shm`
+- `backups/`
 
 ## Foundation Scope
 
@@ -156,3 +181,32 @@ See [TESTING.md](./TESTING.md) for the package pricing checklist, including extr
 Real CSV exports for local testing should go in the `imports/` folder. That folder is ignored by Git and should not be committed because it can contain real customer and business data.
 
 Use **Settings → Import Data** inside the POS to select and import the local CSV files.
+
+## White-Label / Reskin Overview
+
+The POS now has a local shop configuration layer so Flynn's Quick Lube remains the default brand while the same app can later be reskinned for another quick-lube business without rewriting workflows.
+
+Use **Settings → Business Profile** to edit the local business name, legal name, location, address, contact info, timezone, currency, tax rate, and invoice/receipt/sticker footer text.
+
+Use **Settings → Theme/Branding** to edit app name, local logo path, brand colors, density, terminology, rewards labels, and module visibility states. The app applies brand colors through CSS variables and falls back to the Flynn's defaults if config is missing.
+
+Use **Settings → Theme/Branding → Export Shop Config** to export settings-only JSON. The export includes:
+
+- Business profile
+- Brand/theme config
+- Service packages
+- Service catalog items
+- Loyalty rules
+- Print settings
+
+The export intentionally does not include:
+
+- Customers
+- Vehicles
+- Tickets/orders
+- Payments
+- Service history
+- Inventory quantities or imported customer data
+- CSV import files
+
+Importing a shop config updates settings, packages, catalog, loyalty rules, and print settings only. It does not wipe operational data.

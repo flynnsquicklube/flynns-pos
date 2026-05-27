@@ -4,11 +4,6 @@ export function PosBottomActions({ onNote, onVoid }: { onNote?: () => void; onVo
   return (
     <div className="sticky bottom-0 z-10 mt-6 flex flex-wrap gap-3 rounded-2xl border border-[var(--pos-border)] bg-[rgba(11,18,32,0.9)] p-3 backdrop-blur-xl">
       <Button variant="secondary" onClick={onNote}>Add Note</Button>
-      <Button variant="secondary" disabled>Discount Coming Soon</Button>
-      <Button variant="secondary" disabled>Promo Code Coming Soon</Button>
-      <Button variant="secondary" disabled>Photos Coming Soon</Button>
-      <Button variant="secondary" disabled>Signature Coming Soon</Button>
-      <Button variant="secondary" disabled>Print Coming Soon</Button>
       <Button variant="danger" onClick={onVoid}>Void Ticket</Button>
     </div>
   );

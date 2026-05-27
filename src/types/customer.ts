@@ -6,6 +6,10 @@ export interface Customer {
   email: string | null;
   notes: string | null;
   firebase_uid: string | null;
+  app_email?: string | null;
+  app_phone?: string | null;
+  app_link_status?: "unlinked" | "matched" | "linked" | "conflict" | null;
+  app_linked_at?: string | null;
   referral_code: string | null;
   external_source?: string | null;
   external_id?: string | null;
