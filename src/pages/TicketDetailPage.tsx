@@ -31,11 +31,10 @@ import { searchInventoryAdvanced, type InventorySearchFilters } from "../lib/db/
 import { createPaymentAndRefreshTicket, getPaymentsByTicket, getTicketPaymentSummary, type TicketPaymentSummary } from "../lib/db/repositories/paymentsRepo";
 import { listPrintJobsByTicket } from "../lib/db/repositories/printJobsRepo";
 import { getServiceHistoryByVehicle } from "../lib/db/repositories/serviceHistoryRepo";
-import { addTicketItem, cancelTicket, finalizeTicket, getTicketById, listActiveTickets, markWaitingPayment, removeTicketItem, reopenTicket, sendTicketToBay, updateTicketItem, updateTicketItemQuantity, updateTicketNotes } from "../lib/db/repositories/ticketsRepo";
-import { getSetting } from "../lib/db/repositories/settingsRepo";
+import { addTicketItem, cancelTicket, ensureTicketTotals, finalizeTicket, getTicketById, listActiveTickets, markWaitingPayment, removeTicketItem, reopenTicket, sendTicketToBay, updateTicketItem, updateTicketItemQuantity, updateTicketNotes } from "../lib/db/repositories/ticketsRepo";
 import { applyCouponToTicket, getTicketCouponApplications, listActiveCouponsByCustomer, removeCouponFromTicket, type TicketCouponApplication } from "../lib/db/repositories/couponsRepo";
 import { createFreeOilChangeCoupon, getPunchCardByVehicle, type VehiclePunchCard } from "../lib/db/repositories/punchCardsRepo";
-import { defaultBusinessProfile, getBusinessProfile, type BusinessProfile } from "../lib/config/businessProfile";
+import { defaultBusinessProfile, getBusinessProfile, getEffectiveTaxRatePercent, type BusinessProfile } from "../lib/config/businessProfile";
 import { getDisplayInvoiceNumber } from "../lib/domain/invoices/invoiceNumber";
 import { getTicketBackDestination, type TicketBackDestination, type TicketRouteState } from "../lib/domain/tickets/ticketNavigation";
 import { getRewardSummary } from "../lib/domain/loyalty/rewardDisplay";
@@ -146,7 +145,16 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
     }
     setLoading(true);
     getTicketById(ticketId)
-      .then((result) => {
+      .then(async (result) => {
+        if (result && result.status !== "completed" && result.status !== "canceled" && (
+          result.tax_total === undefined ||
+          result.tax_rate === undefined ||
+          result.taxable_subtotal === undefined ||
+          result.amount_due === undefined
+        )) {
+          await ensureTicketTotals(ticketId);
+          result = await getTicketById(ticketId);
+        }
         setTicket(result);
         setFinalMileage(result?.vehicle_mileage ? String(result.vehicle_mileage) : "");
         setOilType(result?.vehicle_oil_type ?? "");
@@ -177,7 +185,7 @@ export function TicketDetailPage({ ticketId, routeState, onBack, onStartTicket, 
   useEffect(loadTicket, [ticketId]);
   useEffect(() => {
     getBusinessProfile().then(setBusinessProfile).catch(() => setBusinessProfile(defaultBusinessProfile));
-    getSetting("tax_rate").then((setting) => setTaxRate(setting ? Number(setting.value) || 0 : 0)).catch(() => setTaxRate(0));
+    getEffectiveTaxRatePercent().then((rate) => setTaxRate(rate)).catch(() => setTaxRate(7));
   }, []);
   useEffect(() => {
     if (addItemMode !== "inventory") return;

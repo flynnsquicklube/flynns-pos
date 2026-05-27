@@ -3,6 +3,7 @@ import { createId } from "../../utils/ids";
 import { nowIso, todayIsoDate } from "../../utils/dates";
 import { calculateTicketTotals } from "../../pricing/pricingEngine";
 import { assertTicketTransition } from "../../domain/tickets/ticketWorkflow";
+import { getEffectiveTaxRate } from "../../config/businessProfile";
 import { validateFinalMileage, validateTicketLines } from "../../domain/tickets/ticketValidation";
 import { createPayment, refreshTicketPaymentStatus } from "./paymentsRepo";
 import { createServiceHistory, getServiceHistoryByTicket } from "./serviceHistoryRepo";
@@ -16,6 +17,7 @@ import { getCurrentEmployeeSnapshot } from "../../security/currentUser";
 import { getWorkOrderColumn } from "../../domain/tickets/workOrderStatus";
 import type { PaymentMethod } from "../../../types/payment";
 import type { TicketPackageDetails, TicketPackageDetailsInput } from "../../../types/servicePackage";
+import type { Payment } from "../../../types/payment";
 import type { Ticket, TicketItem, TicketLineInput, TicketStatus, TicketWithDetails } from "../../../types/ticket";
 
 export interface DashboardMetrics {
@@ -129,24 +131,27 @@ export async function createTicketWithItems(input: CreateTicketInput): Promise<T
   const employee = getCurrentEmployeeSnapshot();
   const timestamp = nowIso();
   const invoiceNumber = await generateInvoiceNumber(timestamp);
-  const totals = calculateTicketTotals(input.items, input.taxRate);
+  const totals = calculateTicketTotals(input.items, [], { taxRate: input.taxRate });
 
   await execute(
     `INSERT INTO tickets (
-      id, invoice_number, customer_id, vehicle_id, status, subtotal, discount_total, tax_total, fee_total,
-      total, payment_status, notes, customer_concern, technician_notes, internal_notes,
+      id, invoice_number, customer_id, vehicle_id, status, subtotal, discount_total, taxable_subtotal, tax_rate, tax_total, fee_total,
+      total, amount_due, payment_status, notes, customer_concern, technician_notes, internal_notes,
       created_at, updated_at, completed_at, deleted_at, sync_status, created_by_employee_id
-    ) VALUES (?, ?, ?, ?, 'checked_in', ?, ?, ?, ?, ?, 'unpaid', NULL, ?, ?, ?, ?, ?, NULL, NULL, 'pending', ?)`,
+    ) VALUES (?, ?, ?, ?, 'checked_in', ?, ?, ?, ?, ?, ?, ?, ?, 'unpaid', NULL, ?, ?, ?, ?, ?, NULL, NULL, 'pending', ?)`,
     [
       id,
       invoiceNumber,
       input.customer_id,
       input.vehicle_id,
       totals.subtotal,
-      totals.discount_total,
-      totals.tax_total,
-      totals.fee_total,
+      totals.discountTotal,
+      totals.taxableSubtotal,
+      totals.taxRate,
+      totals.taxTotal,
+      totals.feeTotal,
       totals.total,
+      totals.amountDue,
       input.customer_concern,
       input.technician_notes,
       input.internal_notes,
@@ -579,8 +584,15 @@ export async function updateTicketNotes(
   );
 }
 
-async function recalculateTicketTotals(ticketId: string, taxRate = 0): Promise<void> {
+async function recalculateTicketTotals(ticketId: string, taxRate?: number): Promise<void> {
+  if (taxRate === undefined) {
+    taxRate = await getEffectiveTaxRate();
+  }
   const items = await loadItems([ticketId]);
+  const payments = await query<Payment>(
+    "SELECT amount, status FROM payments WHERE ticket_id = ? AND deleted_at IS NULL",
+    [ticketId]
+  );
   const totals = calculateTicketTotals(
     items.map((item) => ({
       service_id: item.service_id,
@@ -592,12 +604,27 @@ async function recalculateTicketTotals(ticketId: string, taxRate = 0): Promise<v
       unit_price: item.unit_price,
       taxable: item.taxable
     })),
-    taxRate
+    payments,
+    { taxRate }
   );
   await execute(
-    "UPDATE tickets SET subtotal = ?, discount_total = ?, tax_total = ?, fee_total = ?, total = ?, updated_at = ?, sync_status = 'pending' WHERE id = ?",
-    [totals.subtotal, totals.discount_total, totals.tax_total, totals.fee_total, totals.total, nowIso(), ticketId]
+    "UPDATE tickets SET subtotal = ?, discount_total = ?, taxable_subtotal = ?, tax_rate = ?, tax_total = ?, fee_total = ?, total = ?, amount_due = ?, updated_at = ?, sync_status = 'pending' WHERE id = ?",
+    [totals.subtotal, totals.discountTotal, totals.taxableSubtotal, totals.taxRate, totals.taxTotal, totals.feeTotal, totals.total, totals.amountDue, nowIso(), ticketId]
   );
+}
+
+export async function ensureTicketTotals(ticketId: string): Promise<void> {
+  const ticket = await getTicket(ticketId);
+  if (!ticket) throw new Error("Ticket not found.");
+  if (ticket.status === "completed" || ticket.status === "canceled") return;
+  if (
+    ticket.tax_total === undefined ||
+    ticket.tax_rate === undefined ||
+    ticket.taxable_subtotal === undefined ||
+    ticket.amount_due === undefined
+  ) {
+    await recalculateTicketTotals(ticketId);
+  }
 }
 
 export async function addTicketItem(ticketId: string, item: TicketLineInput, taxRate = 0): Promise<void> {

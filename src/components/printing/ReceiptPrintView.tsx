@@ -2,6 +2,10 @@ import { formatMoney } from "../../lib/utils/money";
 import type { ReceiptPayload } from "../../lib/printing/printTypes";
 import flynnsLogoUrl from "../../assets/brand/flynns-quick-lube-logo.png";
 
+function formatTaxRate(rate: number) {
+  return `${(Number.isFinite(rate) ? rate * 100 : 0).toFixed(2)}%`;
+}
+
 export function ReceiptPrintView({ payload }: { payload: ReceiptPayload }) {
   const customer = [payload.ticket.customer_first_name, payload.ticket.customer_last_name].filter(Boolean).join(" ") || "Walk-in";
   const vehicle = [payload.ticket.vehicle_year, payload.ticket.vehicle_make, payload.ticket.vehicle_model].filter(Boolean).join(" ");
@@ -25,7 +29,8 @@ export function ReceiptPrintView({ payload }: { payload: ReceiptPayload }) {
         </tbody>
       </table>
       <section className="receipt-totals">
-        <div><span>Tax</span><strong>{formatMoney(payload.ticket.tax_total)}</strong></div>
+        <div><span>Taxable Subtotal</span><strong>{formatMoney(payload.ticket.taxable_subtotal)}</strong></div>
+        <div><span>{`Sales Tax (${formatTaxRate(payload.ticket.tax_rate ?? 0)})`}</span><strong>{formatMoney(payload.ticket.tax_total)}</strong></div>
         <div><span>Total</span><strong>{formatMoney(payload.ticket.total)}</strong></div>
         <div><span>Paid</span><strong>{formatMoney(payload.paidTotal)}</strong></div>
         <div><span>Balance</span><strong>{formatMoney(payload.balanceDue)}</strong></div>

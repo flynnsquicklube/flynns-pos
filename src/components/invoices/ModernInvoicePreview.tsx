@@ -114,6 +114,10 @@ function itemDescription(item: TicketItem, ticket: TicketWithDetails) {
   return parts || item.item_type || "Service item";
 }
 
+function formatTaxRate(rate: number) {
+  return `${(Number.isFinite(rate) ? rate * 100 : 0).toFixed(2)}%`;
+}
+
 function paymentSummary(payments: Payment[]) {
   const paid = payments.filter((payment) => payment.status === "paid");
   if (!paid.length) return "No payment recorded";
@@ -234,7 +238,8 @@ export function ModernInvoicePreview({
               <TotalRow label="Subtotal" value={formatMoney(ticket.subtotal)} />
               <TotalRow label="Discount" value={`-${formatMoney(ticket.discount_total)}`} highlight={ticket.discount_total > 0 ? "green" : undefined} />
               {ticket.discount_total > 0 ? <TotalRow label="Subtotal After Discount" value={formatMoney(Math.max(ticket.subtotal - ticket.discount_total, 0))} /> : null}
-              <TotalRow label="Tax" value={formatMoney(ticket.tax_total)} />
+              {ticket.taxable_subtotal > 0 ? <TotalRow label="Taxable Subtotal" value={formatMoney(ticket.taxable_subtotal)} /> : null}
+              <TotalRow label={`Sales Tax (${formatTaxRate(ticket.tax_rate ?? 0)})`} value={formatMoney(ticket.tax_total)} />
               {ticket.fee_total > 0 ? <TotalRow label="Fees" value={formatMoney(ticket.fee_total)} /> : null}
               <TotalRow label="Paid" value={formatMoney(paidAmount)} />
               <TotalRow label="Amount Due" value={formatMoney(balanceDue)} />

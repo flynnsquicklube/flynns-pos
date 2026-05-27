@@ -1,6 +1,7 @@
 import { Save } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
+import { Input } from "../ui/Input";
 import { formatMoney } from "../../lib/utils/money";
 import type { Customer } from "../../types/customer";
 import type { TicketLineInput } from "../../types/ticket";
@@ -20,6 +21,14 @@ interface OrderReviewStepProps {
   saving: boolean;
   onPrevious: () => void;
   onCreateOrder: () => void;
+  onAddInventoryItem: () => void;
+  onAddService: () => void;
+  onAddLabor: () => void;
+  onAddDiscount: () => void;
+  onAddFee: () => void;
+  onAddCustom: () => void;
+  onUpdateLineQuantity: (index: number, quantity: number) => void;
+  onRemoveLine: (index: number) => void;
 }
 
 export function OrderReviewStep(props: OrderReviewStepProps) {
@@ -38,6 +47,18 @@ export function OrderReviewStep(props: OrderReviewStepProps) {
           </div>
         </div>
         {props.validation ? <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{props.validation}</div> : null}
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onClick={props.onAddInventoryItem}>Add Item</Button>
+            <Button variant="secondary" size="sm" onClick={props.onAddService}>Add Service</Button>
+            <Button variant="secondary" size="sm" onClick={props.onAddLabor}>Add Labor</Button>
+            <Button variant="secondary" size="sm" onClick={props.onAddDiscount}>Add Discount</Button>
+            <Button variant="secondary" size="sm" onClick={props.onAddFee}>Add Fee</Button>
+            <Button variant="secondary" size="sm" onClick={props.onAddCustom}>Add Custom</Button>
+          </div>
+          <div className="text-xs text-[var(--pos-muted)]">Add or edit order lines before sending to a bay.</div>
+        </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="rounded-xl border border-[var(--pos-border)] bg-[var(--pos-panel-2)] p-4">
@@ -61,6 +82,7 @@ export function OrderReviewStep(props: OrderReviewStepProps) {
                 <th className="px-4 py-3">Service / Item</th>
                 <th className="px-4 py-3 text-right">Qty</th>
                 <th className="px-4 py-3 text-right">Unit</th>
+                <th className="px-4 py-3 text-right">Actions</th>
                 <th className="px-4 py-3 text-right">Total</th>
               </tr>
             </thead>
@@ -68,8 +90,24 @@ export function OrderReviewStep(props: OrderReviewStepProps) {
               {props.lines.map((line, index) => (
                 <tr key={`${line.name}-${index}`}>
                   <td className="border-t border-[var(--pos-border)] px-4 py-3 font-medium text-[var(--pos-text)]">{line.name}</td>
-                  <td className="border-t border-[var(--pos-border)] px-4 py-3 text-right text-[var(--pos-muted)]">{line.quantity}</td>
+                  <td className="border-t border-[var(--pos-border)] px-4 py-3 text-right text-[var(--pos-muted)]">
+                    {line.item_type === "package" || line.package_id ? (
+                      <span>{line.quantity}</span>
+                    ) : (
+                      <Input
+                        type="number"
+                        className="inline-flex w-20"
+                        min="0"
+                        step="1"
+                        value={String(line.quantity)}
+                        onChange={(event) => props.onUpdateLineQuantity(index, Number(event.target.value) || 0)}
+                      />
+                    )}
+                  </td>
                   <td className="border-t border-[var(--pos-border)] px-4 py-3 text-right text-[var(--pos-muted)]">{formatMoney(line.unit_price)}</td>
+                  <td className="border-t border-[var(--pos-border)] px-4 py-3 text-right text-[var(--pos-muted)]">
+                    <Button variant="ghost" size="sm" onClick={() => props.onRemoveLine(index)}>Remove</Button>
+                  </td>
                   <td className="border-t border-[var(--pos-border)] px-4 py-3 text-right font-semibold text-[var(--pos-text)]">{formatMoney(line.quantity * line.unit_price)}</td>
                 </tr>
               ))}
@@ -86,8 +124,8 @@ export function OrderReviewStep(props: OrderReviewStepProps) {
           </div>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between text-[var(--pos-muted)]"><span>Subtotal</span><span>{formatMoney(props.totals.subtotal)}</span></div>
-            <div className="flex justify-between text-[var(--pos-muted)]"><span>Tax</span><span>{formatMoney(props.totals.tax_total)}</span></div>
-            <div className="flex justify-between text-[var(--pos-muted)]"><span>Discount</span><span>{formatMoney(props.totals.discount_total)}</span></div>
+            <div className="flex justify-between text-[var(--pos-muted)]"><span>Tax</span><span>{formatMoney(props.totals.taxTotal)}</span></div>
+            <div className="flex justify-between text-[var(--pos-muted)]"><span>Discount</span><span>{formatMoney(props.totals.discountTotal)}</span></div>
             <div className="flex justify-between border-t border-[var(--pos-border)] pt-3 text-2xl font-black text-[var(--pos-text)]"><span>Total</span><span>{formatMoney(props.totals.total)}</span></div>
           </div>
         </div>

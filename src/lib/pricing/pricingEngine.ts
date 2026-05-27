@@ -1,15 +1,9 @@
-import type { TicketLineInput } from "../../types/ticket";
 import type { ServiceCatalogItem } from "../../types/catalog";
 import type { PackageFilterType, ServicePackage } from "../../types/servicePackage";
+import { calculateTicketTotals, normalizeTaxRate } from "../domain/tickets/ticketTotals";
 
-export interface TicketTotals {
-  subtotal: number;
-  taxable_subtotal: number;
-  discount_total: number;
-  fee_total: number;
-  tax_total: number;
-  total: number;
-}
+export { calculateTicketTotals, normalizeTaxRate };
+export type TicketTotals = ReturnType<typeof calculateTicketTotals>;
 
 export interface PackageAddonInput {
   name: string;
@@ -52,38 +46,6 @@ export interface PackagePricingBreakdown {
 
 function roundMoney(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
-}
-
-export function normalizeTaxRate(value: string | number | null | undefined): number {
-  const parsed = typeof value === "number" ? value : Number(value ?? 0);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return parsed > 1 ? parsed / 100 : parsed;
-}
-
-export function calculateTicketTotals(lines: TicketLineInput[], taxRateInput = 0): TicketTotals {
-  const taxRate = normalizeTaxRate(taxRateInput);
-  const discount_total = roundMoney(
-    lines.reduce((sum, line) => sum + (line.item_type === "discount" ? Math.abs(line.quantity * line.unit_price) : 0), 0)
-  );
-  const fee_total = roundMoney(lines.reduce((sum, line) => sum + (line.item_type === "fee" ? line.quantity * line.unit_price : 0), 0));
-  const grossSubtotal = roundMoney(lines.reduce((sum, line) => sum + (line.item_type === "discount" ? 0 : line.quantity * line.unit_price), 0));
-  const taxable_subtotal = roundMoney(
-    lines.reduce((sum, line) => {
-      const lineTotal = line.quantity * line.unit_price;
-      if (!line.taxable || line.item_type === "discount") return sum;
-      return sum + lineTotal;
-    }, 0)
-  );
-  const subtotal = roundMoney(Math.max(grossSubtotal - discount_total, 0));
-  const tax_total = roundMoney(Math.max(taxable_subtotal - discount_total, 0) * taxRate);
-  return {
-    subtotal,
-    taxable_subtotal,
-    discount_total,
-    fee_total,
-    tax_total,
-    total: roundMoney(Math.max(subtotal + tax_total, 0))
-  };
 }
 
 export function catalogItemToAddon(item: ServiceCatalogItem, quantity = 1): PackageAddonInput {

@@ -32,6 +32,8 @@ export interface BusinessProfile {
 
 export const defaultInvoiceDisclaimer = "Disclaimer; Flynn's Quick Lube LLC, is not responsible for damage caused by theft, fire or acts of nature. I hereby authorize the above repairs, including sublet work, along with the necessary materials. Repair parts and labor are warranted for a period of 30 days from date of service unless otherwise stated. Flynn's Quick Lube will not be responsible for cost of repairs to vehicles that have not first been inspected by Flynn's Quick Lube employees during the 30 day warranty period. Flynn's Quick Lube and or their employees may operate my vehicle for the purpose of testing, inspection and delivery at my risk.\n\nPayment Policy: A 3% processing fee will be added to all payments made by credit card. Customers may avoid this fee by paying with cash or other non-credit payment methods.";
 
+export const DEFAULT_SALES_TAX_RATE = 7;
+
 export const defaultBusinessProfile: BusinessProfile = {
   business_name: "Flynn's Quick Lube",
   legal_name: "Flynn's Quick Lube",
@@ -70,6 +72,30 @@ export async function getBusinessProfile(): Promise<BusinessProfile> {
     ...profile,
     [key]: setting?.value ?? profile[key as keyof BusinessProfile]
   }), { ...defaultBusinessProfile });
+}
+
+export function normalizeTaxRate(value: string | number | null | undefined): number {
+  const parsed = typeof value === "number" ? value : Number((value ?? "").toString().trim());
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed > 1 ? parsed / 100 : parsed;
+}
+
+export function formatTaxRatePercent(value: number): number {
+  return Math.round((normalizeTaxRate(value) * 100 + Number.EPSILON) * 100) / 100;
+}
+
+export async function getEffectiveTaxRate(): Promise<number> {
+  const setting = await getSetting("tax_rate");
+  const effectiveRate = normalizeTaxRate(setting?.value ?? null);
+  if (effectiveRate > 0) return effectiveRate;
+  const profile = await getBusinessProfile();
+  const profileRate = normalizeTaxRate(profile.default_tax_rate);
+  if (profileRate > 0) return profileRate;
+  return normalizeTaxRate(DEFAULT_SALES_TAX_RATE);
+}
+
+export async function getEffectiveTaxRatePercent(): Promise<number> {
+  return formatTaxRatePercent(await getEffectiveTaxRate());
 }
 
 export async function saveBusinessProfile(profile: BusinessProfile): Promise<void> {

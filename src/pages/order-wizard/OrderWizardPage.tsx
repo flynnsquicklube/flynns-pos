@@ -22,6 +22,7 @@ import { cancelDraft, createOrderDraft, getOrderDraftById, markDraftConverted, t
 import { listActivePackages } from "../../lib/db/repositories/packagesRepo";
 import { getSetting } from "../../lib/db/repositories/settingsRepo";
 import { createTicketWithItems, listActiveTickets, startService } from "../../lib/db/repositories/ticketsRepo";
+import { getEffectiveTaxRatePercent } from "../../lib/config/businessProfile";
 import { createWindowSticker, updateWindowStickerStatus } from "../../lib/db/repositories/windowStickersRepo";
 import { createWindowStickerPrintJob, markPrintJobPreviewed, markPrintJobPrinted } from "../../lib/printing/printJobService";
 import { applyVehicleDecode, createVehicle, findVehicleByPlate, findVehicleByVin, findVehicleByVinOrPlate, findVehiclesByPlatePartial, getVehicleById, searchVehicles, updateVehicle, type VehicleSearchResult } from "../../lib/db/repositories/vehiclesRepo";
@@ -248,6 +249,8 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
   const [platePartialSearching, setPlatePartialSearching] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
   const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [, setAddItemMode] = useState<string | null>(null);
+  // setAddItemMode is used by the review step to open appropriate add-item modals
   const draftSaveInFlightRef = useRef(false);
   const draftRestoreAttemptedRef = useRef(false);
   const { notify } = useToast();
@@ -369,11 +372,11 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
   }, []);
 
   useEffect(() => {
-    Promise.all([listActivePackages(), listActiveCatalogItems(), getSetting("tax_rate")])
-      .then(([activePackages, activeCatalogItems, setting]) => {
+    Promise.all([listActivePackages(), listActiveCatalogItems(), getEffectiveTaxRatePercent()])
+      .then(([activePackages, activeCatalogItems, effectiveTaxRate]) => {
         setPackages(activePackages);
         setCatalogItems(activeCatalogItems);
-        setState((current) => ({ ...current, taxRate: setting ? Number(setting.value) || 0 : 0 }));
+        setState((current) => ({ ...current, taxRate: effectiveTaxRate }));
       })
       .catch((error: unknown) => setState((current) => ({ ...current, validation: error instanceof Error ? error.message : "Unable to load service catalog." })));
   }, [setState]);
@@ -2185,8 +2188,26 @@ export function OrderWizardPage({ onCreated, onBackToStart, initialDraftId }: Or
           totals={totals}
           validation={state.validation}
           saving={saving}
-          onPrevious={previousStep}
-          onCreateOrder={createOrder}
+            onPrevious={previousStep}
+            onCreateOrder={createOrder}
+            onAddInventoryItem={() => setAddItemMode("inventory")}
+            onAddService={() => setWorkflowPackage(null) /* open service selector in servicing step */}
+            onAddLabor={() => setAddItemMode("labor")}
+            onAddDiscount={() => setAddItemMode("discount")}
+            onAddFee={() => setAddItemMode("fee")}
+            onAddCustom={() => setAddItemMode("custom")}
+            onUpdateLineQuantity={(index, quantity) => setState((current) => {
+              const next = [...current.selectedLines];
+              const target = next[index];
+              if (!target) return current;
+              target.quantity = quantity;
+              return { ...current, selectedLines: next, selectedCatalogItems: next.filter((l) => l.item_type !== "package") };
+            })}
+            onRemoveLine={(index) => setState((current) => {
+              const next = [...current.selectedLines];
+              next.splice(index, 1);
+              return { ...current, selectedLines: next };
+            })}
         />
       ) : null}
     </OrderWizardShell>

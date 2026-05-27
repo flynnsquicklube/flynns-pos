@@ -2,7 +2,7 @@ import { calculateTicketTotals } from "../../pricing/pricingEngine";
 import { createId } from "../../utils/ids";
 import { nowIso } from "../../utils/dates";
 import { execute, query } from "../sqlite";
-import { getSetting } from "./settingsRepo";
+import { getEffectiveTaxRate } from "../../config/businessProfile";
 import { calculateCouponDiscount, couponDiscountLineName, hasCouponDiscountLine, type CouponDiscountType, type CustomerCouponRecord } from "../../domain/loyalty/couponRules";
 import { enqueueLoyaltyEvent } from "./loyaltySyncQueueRepo";
 import { buildCouponRedeemedPayload } from "../../integrations/loyalty/loyaltyPayloadBuilders";
@@ -38,8 +38,7 @@ export interface CustomerCouponInput {
 }
 
 async function taxRate(): Promise<number> {
-  const setting = await getSetting("tax_rate");
-  return Number(setting?.value) || 0;
+  return await getEffectiveTaxRate();
 }
 
 async function recalculateTicket(ticketId: string): Promise<void> {
@@ -53,11 +52,11 @@ async function recalculateTicket(ticketId: string): Promise<void> {
     unit_price: number;
     taxable: number;
   }>("SELECT service_id, item_type, package_id, inventory_item_id, name, quantity, unit_price, taxable FROM ticket_items WHERE ticket_id = ? AND deleted_at IS NULL", [ticketId]);
-  const totals = calculateTicketTotals(rows, await taxRate());
+  const totals = calculateTicketTotals(rows, [], { taxRate: await taxRate() });
   const activeCouponRows = await query<{ coupon_id: string }>("SELECT coupon_id FROM ticket_coupon_applications WHERE ticket_id = ? AND status = 'applied'", [ticketId]);
   await execute(
-    "UPDATE tickets SET subtotal = ?, discount_total = ?, tax_total = ?, fee_total = ?, total = ?, applied_coupon_ids = ?, updated_at = ?, sync_status = 'pending' WHERE id = ?",
-    [totals.subtotal, totals.discount_total, totals.tax_total, totals.fee_total, totals.total, activeCouponRows.map((row) => row.coupon_id).join(",") || null, nowIso(), ticketId]
+    "UPDATE tickets SET subtotal = ?, discount_total = ?, taxable_subtotal = ?, tax_rate = ?, tax_total = ?, fee_total = ?, total = ?, amount_due = ?, applied_coupon_ids = ?, updated_at = ?, sync_status = 'pending' WHERE id = ?",
+    [totals.subtotal, totals.discountTotal, totals.taxableSubtotal, totals.taxRate, totals.taxTotal, totals.feeTotal, totals.total, totals.amountDue, activeCouponRows.map((row) => row.coupon_id).join(",") || null, nowIso(), ticketId]
   );
 }
 

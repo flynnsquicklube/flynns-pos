@@ -18,6 +18,10 @@ function vehicleName(ticket: TicketWithDetails) {
   return [ticket.vehicle_year, ticket.vehicle_make, ticket.vehicle_model].filter(Boolean).join(" ") || "Vehicle";
 }
 
+function formatTaxRate(rate: number) {
+  return `${(Number.isFinite(rate) ? rate * 100 : 0).toFixed(2)}%`;
+}
+
 export function InvoiceView({ ticket, payments }: InvoiceViewProps) {
   const [profile, setProfile] = useState<BusinessProfile>(defaultBusinessProfile);
   const paid = payments.filter((payment) => payment.status === "paid").reduce((sum, payment) => sum + payment.amount, 0);
@@ -70,7 +74,8 @@ export function InvoiceView({ ticket, payments }: InvoiceViewProps) {
         </table>
         <div className="mt-5 ml-auto max-w-sm space-y-2 text-sm">
           <div className="flex justify-between"><span>Subtotal</span><span>{formatMoney(ticket.subtotal)}</span></div>
-          <div className="flex justify-between"><span>Tax</span><span>{formatMoney(ticket.tax_total)}</span></div>
+          <div className="flex justify-between"><span>Taxable Subtotal</span><span>{formatMoney(ticket.taxable_subtotal)}</span></div>
+          <div className="flex justify-between"><span>{`Sales Tax (${formatTaxRate(ticket.tax_rate ?? 0)})`}</span><span>{formatMoney(ticket.tax_total)}</span></div>
           <div className="flex justify-between"><span>Discount</span><span>{formatMoney(ticket.discount_total)}</span></div>
           <div className="flex justify-between border-t border-slate-200 pt-3 text-xl font-black"><span>Total</span><span>{formatMoney(ticket.total)}</span></div>
           <div className="flex justify-between"><span>Paid</span><span>{formatMoney(paid)}</span></div>

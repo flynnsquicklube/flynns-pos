@@ -5,9 +5,9 @@
 :root {
   --pos-bg: #EEF2F7;
   --pos-bg-soft: #F5F7FA;
-  --pos-sidebar: #003B88;
-  --pos-sidebar-dark: #002D66;
-  --pos-sidebar-light: #075EC8;
+  --pos-sidebar: #FFFFFF;
+  --pos-sidebar-dark: #FFFFFF;
+  --pos-sidebar-light: #F8FBFF;
   --pos-panel: #FFFFFF;
   --pos-panel-2: #F5F7FA;
   --pos-card: #FFFFFF;
@@ -19,7 +19,7 @@
   --pos-blue-soft: #E6F1FF;
   --pos-cyan-soft: #E8F8FF;
   --pos-text: #0E1B33;
-  --pos-muted: #5F6F86;
+  --pos-muted: #64748B;
   --pos-muted-2: #8A98AA;
   --pos-success: #16A34A;
   --pos-warning: #F59E0B;

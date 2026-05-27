@@ -11,11 +11,14 @@ export interface Ticket {
   status: TicketStatus;
   subtotal: number;
   discount_total: number;
+  taxable_subtotal: number;
+  tax_rate: number;
   applied_coupon_ids?: string | null;
   free_oil_change_redeemed?: number;
   tax_total: number;
   fee_total: number;
   total: number;
+  amount_due: number;
   payment_status: PaymentStatus;
   notes: string | null;
   customer_concern: string | null;

@@ -5,6 +5,10 @@ import { formatMoney } from "../../lib/utils/money";
 import type { Payment } from "../../types/payment";
 import type { TicketWithDetails } from "../../types/ticket";
 
+function formatTaxRate(rate: number) {
+  return `${(Number.isFinite(rate) ? rate * 100 : 0).toFixed(2)}%`;
+}
+
 export function ReceiptView({ ticket, payments }: { ticket: TicketWithDetails; payments: Payment[] }) {
   const [profile, setProfile] = useState<BusinessProfile>(defaultBusinessProfile);
   const paid = payments.filter((payment) => payment.status === "paid").reduce((sum, payment) => sum + payment.amount, 0);
@@ -29,7 +33,8 @@ export function ReceiptView({ ticket, payments }: { ticket: TicketWithDetails; p
           ))}
         </div>
         <div className="mt-3 space-y-1">
-          <div className="flex justify-between"><span>Tax</span><span>{formatMoney(ticket.tax_total)}</span></div>
+          <div className="flex justify-between"><span>Taxable Subtotal</span><span>{formatMoney(ticket.taxable_subtotal)}</span></div>
+          <div className="flex justify-between"><span>{`Sales Tax (${formatTaxRate(ticket.tax_rate ?? 0)})`}</span><span>{formatMoney(ticket.tax_total)}</span></div>
           <div className="flex justify-between text-lg font-black"><span>Total</span><span>{formatMoney(ticket.total)}</span></div>
           <div className="flex justify-between"><span>Paid</span><span>{formatMoney(paid)}</span></div>
           <div className="flex justify-between"><span>Balance</span><span>{formatMoney(Math.max(ticket.total - paid, 0))}</span></div>

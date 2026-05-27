@@ -23,6 +23,7 @@ import {
   IconVehicles,
   IconWorkOrders
 } from "../ui/PosNavIcons";
+import { getModuleTheme } from "../../lib/config/moduleTheme";
 
 export type PageKey =
   | "overview"
@@ -154,21 +155,26 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
       }`}
     >
       {/* Logo */}
-      <button
-        type="button"
-        onClick={() => onNavigate("overview")}
-        title={brand.businessName}
-        className={`mx-3 mb-5 flex items-center rounded-2xl bg-white/12 ring-1 ring-white/20 transition hover:bg-white/18 ${
-          expanded ? "xl:mx-3 xl:flex-col xl:gap-1.5 xl:px-3 xl:py-3" : ""
-        } h-14 w-14 justify-center p-2 xl:h-auto xl:w-auto`}
-      >
-        <BrandLogo brand={brand} size={collapsed ? "sm" : "sidebar"} className={expanded ? "xl:h-16" : ""} />
-        <span className={`text-center text-sm font-black leading-tight text-white ${collapsed ? "hidden" : "hidden xl:block"}`}>
-          {brand.businessName}
-          <br />
-          <span className="text-[11px] font-semibold text-blue-100/80">{brand.appName}</span>
-        </span>
-      </button>
+      <div className={`mx-3 mb-5 ${expanded ? "xl:block" : ""}`}>
+        <button
+          type="button"
+          onClick={() => onNavigate("overview")}
+          title={brand.businessName}
+          className={`flex items-center gap-3 rounded-2xl bg-white/6 ring-1 ring-white/10 transition hover:bg-white/10 p-3 ${
+            collapsed ? "justify-center" : "justify-start"
+          }`}
+        >
+          <div className="flex items-center justify-center rounded-lg bg-white/8 p-1" style={{ width: collapsed ? 40 : 44, height: collapsed ? 40 : 44 }}>
+            <BrandLogo brand={brand} size={collapsed ? "sm" : "sidebar"} className={expanded ? "xl:h-16" : ""} />
+          </div>
+          {!collapsed ? (
+            <div className="flex flex-col text-left leading-tight">
+              <div className="text-sm font-black text-white">{brand.businessName}</div>
+              <div className="text-[11px] font-semibold text-blue-100/80">{brand.appName}</div>
+            </div>
+          ) : null}
+        </button>
+      </div>
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-2.5 pb-2">
@@ -189,7 +195,7 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
                     onClick={() => onNavigate(item.key as PageKey)}
                     title={item.label}
                     aria-label={item.label}
-                    className={`relative mb-0.5 flex h-11 w-full items-center gap-3 rounded-xl px-2.5 transition ${
+                    className={`relative mb-0.5 flex h-12 w-full items-center gap-3 rounded-xl px-2.5 transition ${
                       expanded ? "xl:justify-start" : "justify-center"
                     } justify-center ${
                       active
@@ -198,11 +204,27 @@ export function Sidebar({ activePage, onNavigate }: SidebarProps) {
                     }`}
                   >
                     {active && (
-                      <span className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-white" />
+                      <span
+                        className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full"
+                        style={{ backgroundColor: getModuleTheme(item.key).accent }}
+                      />
                     )}
-                    <span className={`shrink-0 ${active ? "text-[var(--pos-sidebar)]" : ""}`}>
-                      <Icon size={20} />
+
+                    {/* Icon chip */}
+                    <span className={`shrink-0 flex items-center justify-center rounded-lg`}>
+                      <span
+                        className="flex items-center justify-center rounded-lg"
+                        style={{
+                          width: collapsed ? 40 : 44,
+                          height: collapsed ? 40 : 44,
+                          backgroundColor: active ? getModuleTheme(item.key).accent : getModuleTheme(item.key).muted,
+                          color: active ? "#fff" : getModuleTheme(item.key).accent
+                        }}
+                      >
+                        <Icon size={20} />
+                      </span>
                     </span>
+
                     <span className={`flex-1 text-left text-[13px] font-bold ${collapsed ? "hidden" : "hidden xl:block"}`}>
                       {item.label}
                     </span>

@@ -29,7 +29,7 @@ import { createEmployee, listEmployees, updateEmployee, type Employee } from "..
 import { getRecentAuditLogs, listAuditLogs, type AuditLogEntry } from "../lib/db/repositories/auditLogRepo";
 import { calculateCloseoutSummary, closeBusinessDay, getCloseoutForDate, getCurrentBusinessDate, listCloseouts, reopenBusinessDay, type CloseoutSummary, type DailyCloseout } from "../lib/db/repositories/dailyCloseoutRepo";
 import type { EmployeeRole } from "../lib/security/permissions";
-import { defaultBusinessProfile, getBusinessProfile, saveBusinessProfile, type BusinessProfile } from "../lib/config/businessProfile";
+import { DEFAULT_SALES_TAX_RATE, defaultBusinessProfile, getBusinessProfile, getEffectiveTaxRatePercent, saveBusinessProfile, type BusinessProfile } from "../lib/config/businessProfile";
 import { applyBrandConfig, getBrandConfig, saveBrandConfig } from "../lib/branding/brandService";
 import { defaultBrand } from "../lib/branding/defaultBrand";
 import type { BrandConfig } from "../lib/branding/brandTypes";
@@ -190,10 +190,9 @@ export function SettingsPage() {
   useEffect(() => {
     setBridgeDebug(getElectronBridgeDebug());
     getLocalStatus().then(setStatus).catch(() => setStatus(null));
-    getSetting("tax_rate").then((setting) => setTaxRate(setting?.value ?? "0")).catch(() => setTaxRate("0"));
+    getEffectiveTaxRatePercent().then((effectiveRate) => setTaxRate(String(effectiveRate))).catch(() => setTaxRate(String(DEFAULT_SALES_TAX_RATE)));
     getBusinessProfile().then((profile) => {
       setBusinessProfile(profile);
-      setTaxRate(profile.default_tax_rate);
       setShop({
         name: profile.business_name,
         address: [profile.address_line_1, profile.city, profile.state, profile.zip].filter(Boolean).join(", "),
@@ -750,7 +749,7 @@ export function SettingsPage() {
               <Input label="Tax ID" value={businessProfile.tax_id} onChange={(event) => setBusinessProfile({ ...businessProfile, tax_id: event.target.value })} />
               <Input label="Timezone" value={businessProfile.timezone} onChange={(event) => setBusinessProfile({ ...businessProfile, timezone: event.target.value })} />
               <Input label="Currency" value={businessProfile.currency} onChange={(event) => setBusinessProfile({ ...businessProfile, currency: event.target.value })} />
-              <Input label="Default tax rate" type="number" step="0.01" value={businessProfile.default_tax_rate} onChange={(event) => setBusinessProfile({ ...businessProfile, default_tax_rate: event.target.value })} />
+              <Input label="Sales Tax Rate" type="number" step="0.01" value={businessProfile.default_tax_rate} helperText="Enter percentage. Example: 7 for 7%." onChange={(event) => setBusinessProfile({ ...businessProfile, default_tax_rate: event.target.value })} />
             </div>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               <Input label="Invoice footer" value={businessProfile.invoice_footer} onChange={(event) => setBusinessProfile({ ...businessProfile, invoice_footer: event.target.value })} />

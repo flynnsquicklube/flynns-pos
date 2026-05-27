@@ -86,7 +86,7 @@ export function useOrderWizardState() {
     validation: null
   });
 
-  const totals = useMemo(() => calculateTicketTotals(state.selectedLines, state.taxRate), [state.selectedLines, state.taxRate]);
+  const totals = useMemo(() => calculateTicketTotals(state.selectedLines, [], { taxRate: state.taxRate }), [state.selectedLines, state.taxRate]);
 
   return { state, setState, totals };
 }

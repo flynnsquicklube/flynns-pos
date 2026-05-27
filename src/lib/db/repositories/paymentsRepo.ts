@@ -140,8 +140,9 @@ export async function getTicketPaymentSummary(ticketId: string): Promise<TicketP
 
 export async function refreshTicketPaymentStatus(ticketId: string): Promise<TicketPaymentSummary> {
   const summary = await getTicketPaymentSummary(ticketId);
-  await execute("UPDATE tickets SET payment_status = ?, updated_at = ?, sync_status = 'pending' WHERE id = ?", [
+  await execute("UPDATE tickets SET payment_status = ?, amount_due = ?, updated_at = ?, sync_status = 'pending' WHERE id = ?", [
     summary.paymentStatus,
+    summary.balanceDue,
     nowIso(),
     ticketId
   ]);
